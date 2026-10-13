@@ -59,7 +59,7 @@ As a plugin, everything is a plugin option, set when you install it or later in 
 | `http_split_sentences` | on | One request per sentence, fetched ahead of playback. The first audio comes after one sentence's synthesis (≈0.3 s with Kokoro-FastAPI on a GPU, against ≈3.7 s for a whole paragraph). If a later sentence fails, Pocket speaks the rest. |
 | `debug_log_text` | off | Logs the exact text each engine is given to `daemon.log`, for troubleshooting pronunciation. The log is readable only by you. |
 
-Nothing about pronunciation is hidden in code: every word swap is a replacement, and each rule that needs code is a setting above. Only Markdown cleanup is fixed (code blocks become "Code block omitted", tables are skipped, links read as their label or "a link"). The defaults suit Kokoro; for Pocket TTS on its own, turn on the two spelling settings and add replacements for the file types and jargon you hear wrong.
+Nothing about pronunciation is hidden in code: every word swap is a replacement, and each rule that needs code is a setting above. Only markup cleanup is fixed: code blocks become "Code block omitted", table rows are read with a pause between cells, links read as their label or "a link", and HTML tags, emoji, footnote markers and terminal colour codes are dropped. The defaults suit Kokoro; for Pocket TTS on its own, turn on the two spelling settings and add replacements for the file types and jargon you hear wrong.
 
 ### Using a TTS server
 

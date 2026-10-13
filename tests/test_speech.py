@@ -220,3 +220,24 @@ def test_survey(md, spoken):
 ])
 def test_regex_replacements(rules, md, spoken):
     assert to_speech(md, {"replacements": rules}).rstrip(".") == spoken.rstrip(".")
+
+
+# Markup other readers clean up (plan section 5b).
+@pytest.mark.parametrize("md,spoken", [
+    ("Before.\n\n| Setting | Default |\n|---|:---:|\n| `max_chars` | 600 |\n| volume | 6 dB |\n\nAfter.",
+     "Before. Setting, Default. max underscore chars, six hundred. volume, six decibels. After."),
+    ("| a | b |\n| - | - |\n| 1 |  |", "a, b. one."),  # empty cells skipped
+    ("| x \\| y | z |", "x | y, z."),  # an escaped pipe is content
+    ("Use <kbd>Ctrl</kbd>+<kbd>C</kbd> to stop.", "Use Ctrl+C to stop."),
+    ("Line one<br>Line two", "Line one. Line two."),
+    ("<details><summary>More</summary>Hidden text</details>", "More. Hidden text."),
+    ("Keep Vec<String> and a < b and `<path>` here.", "Keep Vec<String> and a < b and <path> here."),
+    ("AT&amp;T and a &lt; b", "AT&T and a < b."),
+    ("\x1b[31mError\x1b[0m happened", "Error happened."),
+    ("Done ✅ 🎉 all good ⚠️ and 👍🏽 too", "Done all good and too."),
+    ("It was 25°C.", "It was twenty five°C."),  # ° is a symbol worth keeping
+    ("Link: <https://example.com>.", "Link: a link."),
+    ("Footnote[^1] here.\n\n[^1]: The note.", "Footnote here. The note."),
+])
+def test_markup(md, spoken):
+    assert to_speech(md) == spoken

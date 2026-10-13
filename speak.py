@@ -16,6 +16,7 @@ Env:
   CLAUDE_SPEAKS_RATE       -10..10 (default 1)
 """
 import hashlib
+import html
 import json
 import os
 import re
@@ -24,6 +25,7 @@ import socket
 import subprocess
 import sys
 import time
+import unicodedata
 from pathlib import Path
 
 STATE_DIR = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "claude-speaks"
@@ -299,18 +301,59 @@ def strip_emphasis(text):
     return text
 
 
+# Unicode "other symbols" are emoji, dingbats and box drawing; a few are worth saying.
+KEEP_SYMBOLS = set("°©®™")
+
+
+def is_emoji(c):
+    return (unicodedata.category(c) == "So" and c not in KEEP_SYMBOLS
+            or "\ufe00" <= c <= "\ufe0f" or c == "\u200d" or "\U0001f3fb" <= c <= "\U0001f3ff")
+
+
+def table_row(line):
+    """| a | b | -> "a, b.": each cell a pause, each row a sentence; the |---| row goes."""
+    cells = [c.strip().replace("\\|", "|") for c in re.split(r"(?<!\\)\|", line.strip().strip("|"))]
+    if all(re.fullmatch(r":?-+:?", c) for c in cells if c):
+        return ""
+    return ", ".join(c for c in cells if c) + "."
+
+
+# HTML that turns up in replies. Opening tags only when they're certainly HTML, so a placeholder
+# like <path> or a type like Vec<String> survives.
+HTML_BREAK = "br|p|div|li|ul|ol|details|summary|hr|tr|table|h[1-6]"
+HTML_INLINE = "kbd|code|b|i|em|strong|span|sup|sub|u|s|mark|small|a|img|wbr|td|th"
+
+
+def strip_tags(text):
+    closed = {m.lower() for m in re.findall(r"</([A-Za-z][\w-]*)\s*>", text)}
+    def tag(m):
+        name = m[2].lower()
+        if not (m[1] or m[0].endswith("/>") or name in closed
+                or re.fullmatch(f"{HTML_BREAK}|{HTML_INLINE}", name)):
+            return m[0]
+        return "\n" if re.fullmatch(HTML_BREAK, name) else ""
+    return re.sub(r"<(/?)([A-Za-z][\w-]*)(?:\s[^<>]*)?/?>", tag, text)
+
+
 def strip_markup(md):
     """Markdown structure out, first, so no rule mistakes it for content ("1. first" is not a number)."""
-    text = re.sub(r"```.*?(```|$)", "\nCode block omitted.\n", md, flags=re.S)
-    text = "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("|"))  # tables
+    text = re.sub(r"\x1b\[[0-9;?]*[ -/]*[@-~]", "", md)  # ANSI colours
+    text = "".join(c for c in text if not is_emoji(c))
+    text = re.sub(r"```.*?(```|$)", "\nCode block omitted.\n", text, flags=re.S)
+    text = "\n".join(table_row(l) if l.lstrip().startswith("|") else l for l in text.splitlines())
     text = re.sub(r"^[ \t]*([-*_])(?:[ \t]*\1){2,}[ \t]*$", "", text, flags=re.M)  # rules: ---, * * *
     text = re.sub(r"^[ \t]*=+[ \t]*$", "", text, flags=re.M)  # setext underline (---- went with the rules)
     text = re.sub(r"^\s{0,3}#{1,6}(?:[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*|[ \t]*)$", r"\1", text, flags=re.M)  # headings; #1 isn't one
     text = re.sub(r"^\s*([-*+]|\d+[.)])\s+", "", text, flags=re.M)  # list markers
     text = re.sub(r"^\s*>(?!=)\s?", "", text, flags=re.M)  # quotes, not >=
+    text = re.sub(r"(?m)^\[\^[^\]]+\]:\s*", "", text)  # footnote: its text stays
+    text = re.sub(r"\[\^[^\]]+\]", "", text)  # footnote reference
     text = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", text)  # links/images -> label
+    text = re.sub(r"<(?:https?|mailto):[^>\s]+>", "a link", text)  # autolinks
     text = re.sub(r"https?://[^\s)]*[^\s).,!?;:]", "a link", text)  # not the punctuation after it
+    text = outside_code(text, strip_tags)
     text = outside_code(text, lambda t: re.sub(r"(?<=[a-z])\.(?=[A-Z][a-z])", ". ", t))  # now.Then: a sentence
+    text = outside_code(text, html.unescape)  # after tags: &lt;b&gt; is text, not a tag
     return outside_code(text, strip_emphasis)
 
 

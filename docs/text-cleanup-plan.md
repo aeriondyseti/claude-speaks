@@ -1,6 +1,6 @@
 # Text cleanup sprint: plan
 
-Status: in progress.
+Status: done (sections 1–5c), 2026-10-13. Section 5d is for a later sprint.
 
 ## Decisions (2026-10-13)
 
@@ -90,6 +90,8 @@ Done, with every word in config: regex replacements gained backreferences (`\1`,
 - **Emoji:** `Done ✅ 🎉` reaches the voice. Drop Unicode category `So` and the variation selectors U+FE00–FE0F (cg, livekit).
 - **Autolinks and footnotes:** `<https://example.com>` gives "<a link"; `Footnote[^1]` gives "Footnote[^one]".
 - **Tables:** dropped silently today. Either say "Table omitted." like code blocks, or read rows as sentences ("a, b. 1, 2.", CareyScott). Make it a setting alongside the code-block idea in section 4.
+
+Done: tables are read row by row ("a, b."), with the `|---|` row and empty cells skipped and `\|` kept as content. HTML tags go only when they're certainly HTML (a closing tag, `/>`, or a known tag name), so `<path>` and `Vec<String>` stay; `<br>`, `<p>`, `<summary>` and friends become sentence breaks. Then entities are unescaped. ANSI codes, emoji (Unicode "other symbols", except `°©®™`), skin tones and joiners, autolinks and footnote markers are removed. All of this skips `inline code`.
 
 ### 5c. Config and replacement features
 
