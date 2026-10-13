@@ -118,18 +118,21 @@ def parse_replacements(lines):
             continue
         if len(find) > 2 and find.startswith("/") and find.endswith("/"):
             try:
-                rules.append((re.compile(find[1:-1]), repl))
+                rules.append((re.compile(find[1:-1]), repl, True))
             except re.error:
                 continue
         else:
             flags = re.I if find == find.lower() else 0
-            rules.append((re.compile(r"(?<![\w-])" + re.escape(find) + r"(?![\w-])", flags), repl))
+            rules.append((re.compile(r"(?<![\w-])" + re.escape(find) + r"(?![\w-])", flags), repl, False))
     return rules
 
 
 def apply_replacements(text, lines):
-    for pattern, repl in parse_replacements(lines):
-        text = pattern.sub(lambda m, r=repl: f" {r} " if r else "", text)  # padded; spaces collapse later
+    for pattern, repl, is_regex in parse_replacements(lines):
+        # A pattern may eat the spaces around it (9–12 -> "9 to 12"), so pad; a whole word keeps its
+        # neighbours as they are, which leaves daemon.py a file name for the path rules.
+        pad = " " if is_regex and repl else ""
+        text = pattern.sub(lambda m, r=f"{pad}{repl}{pad}": r, text)
     return text
 
 

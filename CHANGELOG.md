@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-10-13
+
+### Fixed
+
+- A whole-word replacement no longer splits a file name: with `daemon => daymun`,
+  `daemon.py` reads "daymun dot py" instead of losing its "dot". Only `/regex/` rules are
+  padded with spaces now.
+
 ## [0.3.1] - 2026-10-13
 
 ### Fixed
@@ -77,7 +85,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional OpenAI-compatible HTTP engine (raw PCM or vLLM-Omni SSE) with Pocket fallback,
   and a Voxtral 4B compose file for a GPU server.
 
-[Unreleased]: https://github.com/aeriondyseti/claude-speaks/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/aeriondyseti/claude-speaks/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/aeriondyseti/claude-speaks/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/aeriondyseti/claude-speaks/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/aeriondyseti/claude-speaks/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/aeriondyseti/claude-speaks/compare/v0.1.0...v0.2.0
