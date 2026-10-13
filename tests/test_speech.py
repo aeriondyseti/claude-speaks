@@ -22,7 +22,7 @@ def test_sample_default():
         "dash plugins slash speaks slash oh dot three dot two slash, so vee oh dot three dot two. "
         "Commit hash ending with two bee three see and three see bee eight eff seven eight. The RTX fifty sixty tee eye has eight "
         "gigabytes of VRAM; nine to twelve sentences keep p99 under four hundred milliseconds at minus five "
-        "decibels. Use x86 db cfg HTML TTY. See src slash components slash App dot tsx and README dot md, "
+        "decibels. Use x86 db cfg HTML TTY. See src slash components slash App dot tsx and readme dot md, "
         "max underscore chars too. one million two hundred thirty four thousand five hundred sixty seven "
         "items, two times faster, forty five percent. Bold item with a link and a link. Code block omitted."
     )
@@ -35,7 +35,7 @@ def test_sample_pocket_with_word_rules():
     out = to_speech(SAMPLE, cfg)
     for spoken in ("daemon dot pie", "settings dot jay sohn", "The ar tee ex fifty sixty", "of vee ram",
                    "keep pee ninety nine", "Use ex eighty six dee bee see eff gee aitch tee em el tee tee why",
-                   "See source slash components slash App dot tee ess ex and README dot markdown"):
+                   "See source slash components slash App dot tee ess ex and readme dot markdown"):
         assert spoken in out
 
 
@@ -322,4 +322,14 @@ def test_letter_ranges(md, spoken):
     ("Keep id1, 3D, d3.js, 2d and d6e5f7a.", "Keep id1, 3D, d3 dot js, 2d and dee six ee five eff seven eigh."),
 ])
 def test_dice(md, spoken):
+    assert to_speech(md) == spoken
+
+
+@pytest.mark.parametrize("md,spoken", [
+    ("Read README.md and CHANGELOG.md.", "Read readme dot md and changelog dot md."),
+    ("See the TODO list, FIXMEs aside, and the Makefile vs MAKEFILE.", "See the todo list, FIXMEs aside, and the Makefile vs makefile."),
+    ("Edit `Dockerfile`, DOCKERFILE and STYLEGUIDE.md.", "Edit Dockerfile, dockerfile and style guide dot md."),
+    ("IDEAS.md, ROADMAP.md and PROGRESS.md stay.", "IDEAS dot md, ROADMAP dot md and PROGRESS dot md stay."),
+])
+def test_repo_file_names(md, spoken):
     assert to_speech(md) == spoken

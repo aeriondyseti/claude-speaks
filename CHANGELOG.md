@@ -10,6 +10,17 @@ corresponds to 0.1.5.1 in this scheme, and any four-part version is newer than a
 
 ## [Unreleased]
 
+## [0.1.8.0] - 2026-10-13
+
+### Added
+
+- Repo file names that Kokoro spells out letter by letter in capitals are lowercased, as default
+  replacements: `README`, `CHANGELOG`, `TODO`, `TODOS`, `FIXME`, `CODEOWNERS`, `CHEATSHEET`,
+  `MAKEFILE`, `DOCKERFILE`, `GEMFILE`, `RAKEFILE`, `PROCFILE`, `JUSTFILE`, `VAGRANTFILE`, and
+  `STYLEGUIDE` ("style guide"). `README.md` is now "readme dot md". Names it already reads as
+  words, like `ROADMAP` and `LICENSE`, are left alone. Copy the new rules into your own
+  `replacements` list if you keep one.
+
 ## [0.1.7.0] - 2026-10-13
 
 ### Added
@@ -235,7 +246,8 @@ If you keep your own `replacements` list, copy the new default rules into it.
 - Optional OpenAI-compatible HTTP engine (raw PCM or vLLM-Omni SSE) with Pocket fallback,
   and a Voxtral 4B compose file for a GPU server.
 
-[Unreleased]: https://github.com/aeriondyseti/claude-speaks/compare/v0.1.7.0...HEAD
+[Unreleased]: https://github.com/aeriondyseti/claude-speaks/compare/v0.1.8.0...HEAD
+[0.1.8.0]: https://github.com/aeriondyseti/claude-speaks/compare/v0.1.7.0...v0.1.8.0
 [0.1.7.0]: https://github.com/aeriondyseti/claude-speaks/compare/v0.1.6.2...v0.1.7.0
 [0.1.6.2]: https://github.com/aeriondyseti/claude-speaks/compare/v0.1.6.1...v0.1.6.2
 [0.1.6.1]: https://github.com/aeriondyseti/claude-speaks/compare/v0.1.6.0...v0.1.6.1

@@ -213,6 +213,22 @@ LETTERS = dict(zip("abcdefghijklmnopqrstuvwxyz", (
 DEFAULT_REPLACEMENTS = [
     "Ti => tee eye",
     "a-ha => aha",  # Kokoro says "eigh-ha" in some sentences; "aha" is stable
+    # Repo file names Kokoro spells letter by letter in capitals but reads right in lowercase
+    "README => readme",
+    "CHANGELOG => changelog",
+    "TODO => todo",
+    "TODOS => todos",
+    "FIXME => fixme",
+    "CODEOWNERS => codeowners",
+    "CHEATSHEET => cheatsheet",
+    "MAKEFILE => makefile",
+    "DOCKERFILE => dockerfile",
+    "GEMFILE => gemfile",
+    "RAKEFILE => rakefile",
+    "PROCFILE => procfile",
+    "JUSTFILE => justfile",
+    "VAGRANTFILE => vagrantfile",
+    "STYLEGUIDE => style guide",
     # Dice: 22d6, d20, 4d6kh3, 2d8-1 (a minus, not the 9–12 range rule below). At most three
     # digits a side, so a short hash like 86441d4 isn't a roll.
     r"/(?<![\w.])(\d{0,3})[dD](\d{1,3})kh(\d{1,3})(?![\w%]|\.\w)/ => \1 dee \2 keep highest \3",
