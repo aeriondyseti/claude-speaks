@@ -133,9 +133,12 @@ LEXICON = {"Ti": "tee eye", "gpu": "gee pee you", "cpu": "see pee you", "vram": 
            "jpg": "jay peg", "jpeg": "jay peg", "toml": "tom-ull", "py": "pie", "exe": "ex ee",
            "wav": "wave", "md": "markdown", "ini": "in ee", "tsx": "tee ess ex", "jsx": "jay ess ex",
            # path words
-           "src": "source", "tmp": "temp", "usr": "user", "mnt": "mount", "vs": "versus"}
-# Vowelless words that are spoken, not spelled.
-SAY_AS_WORD = {"hmm", "shh", "nth", "brr", "psst", "pfft", "mr", "mrs", "dr", "st", "ms"}
+           "src": "source", "tmp": "temp", "usr": "user", "mnt": "mount", "vs": "versus",
+           # words Pocket can't sound out
+           "gym": "jim", "hmm": "hum", "shh": "shush", "nth": "enth", "brr": "burr",
+           "mr": "mister", "mrs": "missus", "dr": "doctor"}
+# Vowelless words to leave alone rather than spell (ambiguous: St = street/saint, Ms = miz/milliseconds).
+SAY_AS_WORD = {"st", "ms", "psst", "pfft"}
 UNIT_RE = r"%|[KMGT]i?B|ms|s|[kMG]?Hz|dB"
 NUMBER = re.compile(
     r"(?<![\w.])(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?"
@@ -205,6 +208,7 @@ def to_speech(md):
     # Vowelless 2-5 letter words are abbreviations: db, cfg, RTX, HTML -> spelled out
     text = re.sub(r"(?<![\w-])[b-df-hj-np-tv-xzB-DF-HJ-NP-TV-XZ]{2,5}(?![\w-])",
                   lambda m: m[0] if m[0].lower() in SAY_AS_WORD else spell(m[0]), text)
+    text = re.sub(r"(?<![\w-])(?=[A-Z]*Y)[B-DF-HJ-NP-TV-Z]{2,5}(?![\w-])", lambda m: spell(m[0]), text)  # TTY, NYC
     text = re.sub(r"`([^`]*)`", r"\1", text)
     text = re.sub(r"^\s{0,3}#{1,6}\s*", "", text, flags=re.M)  # headings
     text = re.sub(r"^\s*([-*+]|\d+\.)\s+", "", text, flags=re.M)  # list markers
