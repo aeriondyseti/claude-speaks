@@ -13,6 +13,7 @@ Protocol: one JSON object per connection.
   {"cmd": "shutdown"}               exit
 """
 import argparse
+import base64
 import json
 import os
 import socket
@@ -92,8 +93,20 @@ class Speaker:
             return False
         with resp:
             self.player = player = play(cfg.get("http_sample_rate", 24000))
-            while not stop.is_set() and (data := resp.read1(8192)):
-                player.stdin.write(data)
+            if resp.headers.get_content_type() == "text/event-stream":
+                # vLLM-Omni: speech.audio.delta events with base64 PCM, then speech.audio.done
+                # (the connection stays open for a while after done, so stop there).
+                for line in resp:
+                    if stop.is_set() or not line.startswith(b"data:"):
+                        continue
+                    event = json.loads(line[5:])
+                    if event.get("audio"):
+                        player.stdin.write(base64.b64decode(event["audio"]))
+                    if event.get("type", "").endswith(".done"):
+                        break
+            else:
+                while not stop.is_set() and (data := resp.read1(8192)):
+                    player.stdin.write(data)
             player.stdin.close()
         return True
 

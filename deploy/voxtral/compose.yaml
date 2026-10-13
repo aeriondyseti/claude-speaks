@@ -1,0 +1,48 @@
+# Manual trial: Voxtral 4B TTS on the 5060 Ti, OpenAI-style /v1/audio/speech on 127.0.0.1:18090.
+# Follows dyseti-quartermaster/deploy/first-batch conventions; not Quartermaster-managed yet
+# (needs its Docker lifecycle + GPU container mapping, Milestones 9.2/9.5).
+#   docker compose up -d && docker compose logs -f
+name: claude-speaks
+
+services:
+  voxtral-tts:
+    image: vllm/vllm-omni:v0.31.0rc1-x86_64
+    network_mode: host
+    restart: "no"
+    init: true
+    ipc: host
+    healthcheck:
+      disable: true
+    logging:
+      driver: local
+      options: { max-size: "8m", max-file: "2" }
+    environment:
+      HF_HUB_OFFLINE: "1"
+      # On WSL every GPU is visible in the container regardless of device_ids; pin by UUID.
+      CUDA_DEVICE_ORDER: PCI_BUS_ID
+      CUDA_VISIBLE_DEVICES: ${GPU_UUID:-GPU-00000000-0000-0000-0000-000000000000}
+    volumes:
+      - type: bind
+        source: ${HF_HUB:-${HOME}/.cache/huggingface/hub}
+        target: /root/.cache/huggingface/hub
+        read_only: true
+        bind: { create_host_path: false }
+    command:
+      - vllm
+      - serve
+      # Local snapshot path: offline repo-id lookup fails for Mistral-format (params.json) models.
+      - /root/.cache/huggingface/hub/models--mistralai--Voxtral-4B-TTS-2603/snapshots/b81be46c3777f88621676791b512bb01dc1cb970
+      - --served-model-name=mistralai/Voxtral-4B-TTS-2603
+      - --omni
+      - --host=127.0.0.1
+      - --port=18090
+      # Fractions are of the whole card (16.3 GB, ~3.3 GB already used by Windows); weights take 7.8 GB.
+      # Default max_num_batched_tokens (32768) makes the profiling run eat the whole KV budget.
+      - '--stage-overrides={"0": {"gpu_memory_utilization": 0.70, "max_num_seqs": 4, "max_model_len": 4096, "max_num_batched_tokens": 4096}, "1": {"gpu_memory_utilization": 0.1, "max_num_seqs": 4}}'
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["${GPU_UUID:-GPU-00000000-0000-0000-0000-000000000000}"]  # RTX 5060 Ti ("big")
+              capabilities: [gpu]
