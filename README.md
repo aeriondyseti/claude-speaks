@@ -42,7 +42,7 @@ As a plugin, everything is a plugin option, set when you install it or later in 
 | `volume_db` | `6` | Gain through a soft limiter |
 | `max_chars` | `600` | Characters spoken per reply (0 means no limit) |
 | `audio_backend` | `auto` | `paplay`, `sounddevice`, or `auto` (`paplay` if installed) |
-| `replacements` | the light rules | Every word-level fix: `find => replace`, one per entry, applied first and the same for every engine. A plain word matches whole words (any case when written in lowercase); `/regex/` is a pattern. Defaults: `Ti => tee eye`, `~/` and `$HOME` → home, `~` before a number → about, `9–12` → 9 to 12, and dropping empty `()`. Add your own, e.g. `kubectl => cube control`, or `py => pie` and `json => jay sohn` for Pocket TTS. |
+| `replacements` | the light rules | Every word-level fix: `find => replace`, one per entry, applied first and the same for every engine. A plain word matches whole words (any case when written in lowercase); `/regex/` is a pattern. Defaults: `Ti => tee eye`, `~/` and `$HOME` → home, `~` before a number → about, `9–12` → 9 to 12, dropping empty `()`, `2 * 3` → 2 times 3, and `*.py` → star dot py. Add your own, e.g. `kubectl => cube control`, or `py => pie` and `json => jay sohn` for Pocket TTS. |
 | `speak_hashes` | on | Commit hashes and UUIDs read as "hash ending with" plus their last four characters |
 | `speak_paths` | on | Slashes, dots, dashes and underscores read inside paths and file names: `a/b.py` → "a slash b dot py" |
 | `speak_snake_case` | on | `debug_log_text` → "debug underscore log underscore text"; vowelless parts are spelled out |

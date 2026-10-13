@@ -162,7 +162,7 @@ UNITS = {"GB": "gigabytes", "GiB": "gigabytes", "MB": "megabytes", "MiB": "megab
 LETTERS = dict(zip("abcdefghijklmnopqrstuvwxyz", (
     "ay bee see dee ee eff gee aitch eye jay kay el em en oh pee cue ar ess tee you vee "
     "double-you ex why zee").split()))
-# User-editable "find => replace" rules, applied before anything else. A plain word matches whole
+# User-editable "find => replace" rules, applied first (once Markdown structure is gone). A plain word matches whole
 # words (any case when written in lowercase); /regex/ is a pattern. Every word-level fix lives here,
 # never in code; these defaults are the light set that suits Kokoro.
 DEFAULT_REPLACEMENTS = [
@@ -172,6 +172,8 @@ DEFAULT_REPLACEMENTS = [
     r"/~(?=\d)/ => about",
     r"/(?<=\d)\s?[–—-]\s?(?=\d)/ => to",
     r"/(?<=\w)\(\)/ => ",
+    r"/(?<=\d)\s*\*\s*(?=\d)/ => times",
+    r"/(?<![\w*])\*\.(?=\w)/ => star dot",
 ]
 # The rules that need code rather than a find-and-replace, each a setting of its own (default shown).
 TEXT_RULES = {
@@ -232,16 +234,47 @@ def text_rule(cfg, name):
     return value.lower() not in ("false", "0", "off", "no") if isinstance(value, str) else bool(value)
 
 
-def to_speech(md, cfg=None):
-    """Markdown -> speakable text. Everything beyond Markdown cleanup comes from cfg: its
-    `replacements` ("find => replace" lines, DEFAULT_REPLACEMENTS when unset) run first, then
-    each TEXT_RULES setting that is on."""
-    cfg = cfg or {}
-    on = lambda name: text_rule(cfg, name)  # noqa: E731
+# Emphasis never starts or ends inside a word (snake_case, x**2), in runs of one to three.
+EMPHASIS = [re.compile(r"(?<![\w*])(\*{1,3}|~~)(?=[^\s*])(.+?)(?<=[^\s*])\1(?![\w*])"),
+            re.compile(r"(?<![\w_])(_{1,3})(?=[^\s_])(.+?)(?<=[^\s_])\1(?![\w_])")]
+
+
+def outside_code(text, fn):
+    """Apply fn to the text outside `inline code`, which is spoken as written."""
+    parts = re.split(r"(`[^`\n]*`)", text)
+    return "".join(p if i % 2 else fn(p) for i, p in enumerate(parts))
+
+
+def strip_emphasis(text):
+    for _ in range(3):  # nested: **a *b* c**
+        before = text
+        for pattern in EMPHASIS:
+            text = pattern.sub(r"\2", text)
+        if text == before:
+            break
+    return text
+
+
+def strip_markup(md):
+    """Markdown structure out, first, so no rule mistakes it for content ("1. first" is not a number)."""
     text = re.sub(r"```.*?(```|$)", "\nCode block omitted.\n", md, flags=re.S)
     text = "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("|"))  # tables
+    text = re.sub(r"^[ \t]*([-*_])(?:[ \t]*\1){2,}[ \t]*$", "", text, flags=re.M)  # rules: ---, * * *
+    text = re.sub(r"^\s{0,3}#{1,6}\s*", "", text, flags=re.M)  # headings
+    text = re.sub(r"^\s*([-*+]|\d+[.)])\s+", "", text, flags=re.M)  # list markers
+    text = re.sub(r"^\s*>(?!=)\s?", "", text, flags=re.M)  # quotes, not >=
     text = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", text)  # links/images -> label
     text = re.sub(r"https?://\S+", "a link", text)
+    return outside_code(text, strip_emphasis)
+
+
+def to_speech(md, cfg=None):
+    """Markdown -> speakable text. Markdown structure goes first; everything after that comes
+    from cfg: its `replacements` ("find => replace" lines, DEFAULT_REPLACEMENTS when unset),
+    then each TEXT_RULES setting that is on."""
+    cfg = cfg or {}
+    on = lambda name: text_rule(cfg, name)  # noqa: E731
+    text = strip_markup(md)
     text = apply_replacements(text, cfg.get("replacements", DEFAULT_REPLACEMENTS))
     if on("speak_hashes"):
         text = UUID.sub(speak_hash, text)
@@ -262,12 +295,10 @@ def to_speech(md, cfg=None):
         text = re.sub(r"(?<![\w-])[b-df-hj-np-tv-xzB-DF-HJ-NP-TV-XZ]{2,5}(?![\w-])", lambda m: spell(m[0]), text)
         text = re.sub(r"(?<![\w-])(?=[A-Z]*Y)[B-DF-HJ-NP-TV-Z]{2,5}(?![\w-])", lambda m: spell(m[0]), text)
     text = re.sub(r"`([^`]*)`", r"\1", text)
-    text = re.sub(r"^\s{0,3}#{1,6}\s*", "", text, flags=re.M)  # headings
-    text = re.sub(r"^\s*([-*+]|\d+\.)\s+", "", text, flags=re.M)  # list markers
-    text = re.sub(r"^\s*>\s?", "", text, flags=re.M)  # quotes
-    text = re.sub(r"(\*\*|\*|~~)(?=\S)(.+?)(?<=\S)\1", r"\2", text)  # emphasis
-    text = re.sub(r"(?<!\w)(__|_)(?=\S)(.+?)(?<=\S)\1(?!\w)", r"\2", text)  # not snake_case
-    text = re.sub(r"[-*_]{3,}", " ", text)  # rules
+    # A star still here is markup the emphasis rules couldn't pair (or bold across a line
+    # break), never something to say: drop it, keeping words it sat between apart.
+    text = re.sub(r"(?<=\w)\*+(?=\w)", " ", text)
+    text = text.replace("*", "")
     lines = [l.strip() for l in text.splitlines() if l.strip()]
     text = " ".join(l if l[-1] in ".!?:;," else l + "." for l in lines)  # pause between lines
     text = re.sub(r"\s+([.,;:!?])", r"\1", text)  # padding left by speak_path

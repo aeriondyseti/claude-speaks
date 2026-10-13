@@ -38,6 +38,8 @@ Found by running [berga-a/claude-speak](https://github.com/berga-a/claude-speak)
 
 **Safety net:** after all rules, drop any `*` still left (berga-a's catch-all). A literal asterisk is never meant to be spoken; `2 * 3` and globs are handled before it.
 
+Done: Markdown structure (rules, headings, list markers, quotes, links, emphasis) is now removed first, in `strip_markup`, with emphasis skipping `inline code` and never matching inside a word. "times" and "star dot" are default replacements. `>=` at the start of a line is no longer taken for a quote (from 5a). 23 new tests; a test also keeps `plugin.json`'s default replacements equal to `DEFAULT_REPLACEMENTS`. The user's own `replacements` list in `settings.json` gets the new defaults at the end of the sprint.
+
 ## 3. Sentence-by-sentence latency: split long sentences at clauses
 
 With `http_split_sentences`, first audio waits for the first sentence's synthesis. A 300-character first sentence delays it by seconds. berga-a renders sentences over 100 characters in clause-sized pieces, split after `,;:—–`, keeping the text identical when joined. Apply the same in `split_sentences`:

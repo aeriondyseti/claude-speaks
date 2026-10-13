@@ -114,3 +114,38 @@ def test_split_sentences(text, sentences):
 ])
 def test_truncate(text, limit, out):
     assert truncate(text, limit) == out
+
+
+def test_plugin_defaults_match_speak_py():
+    import json
+    manifest = json.loads((Path(__file__).parent.parent / ".claude-plugin/plugin.json").read_text())
+    assert manifest["userConfig"]["replacements"]["default"] == DEFAULT_REPLACEMENTS
+
+
+# Markdown structure is removed before any rule sees it (from berga-a/claude-speak's suite).
+@pytest.mark.parametrize("md,spoken", [
+    ("1. first\n2. second", "first. second."),
+    ("1) first\n2) second", "first. second."),
+    ("***Both*** here.", "Both here."),
+    ("___Totally___ here.", "Totally here."),
+    ("**a *nested* one** here.", "a nested one here."),
+    ("**Bold spanning\ntwo lines** here.", "Bold spanning. two lines here."),
+    ("**Bold with * star** inside.", "Bold with star inside."),
+    ("A **bold** and **another** on one line.", "A bold and another on one line."),
+    ("Math 2 * 3 stays.", "Math two times three stays."),
+    ("Before.\n\n* * *\n\nAfter.", "Before. After."),
+    ("Before.\n\n- - -\n\nAfter.", "Before. After."),
+    ("Before.\n\n___\n\nAfter.", "Before. After."),
+    ("Glob `*.py` and a footnote*", "Glob star dot py and a footnote."),
+    ("Run `ls *.test.ts` here.", "Run ls star dot test dot ts here."),
+    ("Keep `a_b_c` and `x * y`.", "Keep a underscore bee underscore see and x y."),
+    ("x**2 + y**2", "x two + y two."),
+    ("cost = a *** b", "cost = a b."),
+    ("**bold***italic*", "bold italic."),
+    ("see ***** here", "see here."),
+    (">= 3 holds", ">= three holds."),
+    ("> quoted >= 3", "quoted >= three."),
+    ("A snake_case_word and _emphasis_.", "A snake underscore case underscore word and emphasis."),
+])
+def test_markdown(md, spoken):
+    assert to_speech(md) == spoken
