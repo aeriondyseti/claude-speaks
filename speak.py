@@ -125,8 +125,17 @@ LETTERS = dict(zip("abcdefghijklmnopqrstuvwxyz", (
     "ay bee see dee ee eff gee aitch eye jay kay el em en oh pee cue ar ess tee you vee "
     "double-you ex why zee").split()))
 # Whole-word pronunciation fixes; extend with ~/.config/claude-speaks/lexicon.json ({"word": "spoken"}).
-LEXICON = {"Ti": "tee eye", "GPU": "gee pee you", "CPU": "see pee you", "VRAM": "vee ram",
-           "WSL": "double-you ess el", "TTS": "tee tee ess", "CLI": "see el eye", "UUID": "you you eye dee"}
+# Lowercase keys match any case (JSON, json); others match exactly.
+LEXICON = {"Ti": "tee eye", "gpu": "gee pee you", "cpu": "see pee you", "vram": "vee ram",
+           "wsl": "double-you ess el", "tts": "tee tee ess", "cli": "see el eye", "uuid": "you you eye dee",
+           # file types
+           "json": "jay sohn", "yaml": "yah-mull", "yml": "yah-mull", "png": "ping", "gif": "giff",
+           "jpg": "jay peg", "jpeg": "jay peg", "toml": "tom-ull", "py": "pie", "exe": "ex ee",
+           "wav": "wave", "md": "markdown", "ini": "in ee", "tsx": "tee ess ex", "jsx": "jay ess ex",
+           # path words
+           "src": "source", "tmp": "temp", "usr": "user", "mnt": "mount", "vs": "versus"}
+# Vowelless words that are spoken, not spelled.
+SAY_AS_WORD = {"hmm", "shh", "nth", "brr", "psst", "pfft", "mr", "mrs", "dr", "st", "ms"}
 UNIT_RE = r"%|[KMGT]i?B|ms|s|[kMG]?Hz|dB"
 NUMBER = re.compile(
     r"(?<![\w.])(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?"
@@ -188,9 +197,14 @@ def to_speech(md):
     text = re.sub(r"(?<![\w.-])-(?=\d)", "minus ", text)
     text = NUMBER.sub(speak_number, text)
     lexicon = load_lexicon()
-    if lexicon:
-        words = re.compile(r"(?<![\w-])(" + "|".join(map(re.escape, sorted(lexicon, key=len, reverse=True))) + r")(?![\w-])")
-        text = words.sub(lambda m: lexicon[m[1]], text)
+    folded = {k: v for k, v in lexicon.items() if k == k.lower()}
+    for keys, flags, look in ((lexicon.keys() - folded.keys(), 0, lexicon), (folded.keys(), re.I, folded)):
+        if keys:
+            words = re.compile(r"(?<![\w-])(" + "|".join(map(re.escape, sorted(keys, key=len, reverse=True))) + r")(?![\w-])", flags)
+            text = words.sub(lambda m, look=look, flags=flags: look[m[1].lower() if flags else m[1]], text)
+    # Vowelless 2-5 letter words are abbreviations: db, cfg, RTX, HTML -> spelled out
+    text = re.sub(r"(?<![\w-])[b-df-hj-np-tv-xzB-DF-HJ-NP-TV-XZ]{2,5}(?![\w-])",
+                  lambda m: m[0] if m[0].lower() in SAY_AS_WORD else spell(m[0]), text)
     text = re.sub(r"`([^`]*)`", r"\1", text)
     text = re.sub(r"^\s{0,3}#{1,6}\s*", "", text, flags=re.M)  # headings
     text = re.sub(r"^\s*([-*+]|\d+\.)\s+", "", text, flags=re.M)  # list markers
