@@ -35,7 +35,9 @@ warnings.filterwarnings("ignore")
 
 import numpy as np  # noqa: E402
 
-from speak import DEFAULT_REPLACEMENTS, ENV_REF, max_chars, to_speech, truncate  # noqa: E402
+from speak import DEFAULT_REPLACEMENTS, ENV_REF, code_fingerprint, max_chars, to_speech, truncate  # noqa: E402
+
+FINGERPRINT = code_fingerprint(Path(__file__).resolve().parent)  # of the code this process loaded
 
 STATE_DIR = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "claude-speaks"
 SOCKET = STATE_DIR / "daemon.sock"
@@ -349,6 +351,7 @@ def serve(initial_text=None):
     SOCKET.chmod(0o600)  # requests can carry an API key
     srv.listen()
     (STATE_DIR / "daemon.starting").unlink(missing_ok=True)
+    log(f"daemon {FINGERPRINT} ready")
     if initial_text:
         threading.Thread(target=speaker.say, args=(initial_text,), daemon=True).start()
     try:
@@ -360,9 +363,15 @@ def serve(initial_text=None):
                 conn.close()
                 continue
             cmd = req.get("cmd")
+            if cmd == "hello":
+                try:
+                    conn.sendall(f"daemon {FINGERPRINT}\n".encode())
+                except OSError:
+                    pass
             if cmd or not req.get("text"):
                 conn.close()
             if cmd == "shutdown":
+                log("shutting down")
                 speaker.stop()
                 break
             if cmd == "stop":

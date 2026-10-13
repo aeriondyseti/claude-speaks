@@ -15,6 +15,7 @@ Env:
   CLAUDE_SPEAKS_VOICE      SAPI voice name, e.g. "Microsoft Zira Desktop"
   CLAUDE_SPEAKS_RATE       -10..10 (default 1)
 """
+import hashlib
 import json
 import os
 import re
@@ -35,6 +36,15 @@ PS1 = HERE / "say.ps1"
 # Kept outside the plugin folder so plugin updates don't throw away the ~1 GB install.
 VENV = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "claude-speaks/venv"
 UV_ENV = {**os.environ, "UV_PROJECT_ENVIRONMENT": str(VENV)}
+
+
+def code_fingerprint(root=HERE):
+    """Short hash of this copy's speak.py and daemon.py: a daemon started from other code (an
+    older plugin version, or files edited since) answers a different one and gets replaced."""
+    digest = hashlib.sha256()
+    for name in ("speak.py", "daemon.py"):
+        digest.update((root / name).read_bytes())
+    return digest.hexdigest()[:12]
 
 
 def installed():
@@ -298,9 +308,9 @@ def stop_current():
     PID_FILE.unlink(missing_ok=True)
 
 
-def send_to_daemon(req):
-    """Send one request; for speech, relay the daemon's status lines to stdout (the plugin
-    toasts "loading-pocket") until it closes the connection."""
+def send_to_daemon(req, on_line=lambda line: print(line, flush=True)):
+    """Send one request; hand each line the daemon writes back to on_line (for speech, status lines
+    relayed to stdout, which the plugin toasts) until it closes the connection."""
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
         try:
             s.settimeout(2)
@@ -313,7 +323,7 @@ def send_to_daemon(req):
             s.settimeout(180)  # a first Pocket load can take a while
             with s.makefile() as events:
                 for line in events:
-                    print(line.strip(), flush=True)
+                    on_line(line.strip())
         except OSError:
             pass
         return True
@@ -342,22 +352,47 @@ def plugin_options():
         return {}
 
 
-def speak_pocket(reply):
-    options = plugin_options()
-    request = {"text": reply, "options": options, "env": referenced_env(options)}
-    if send_to_daemon(request):
-        return
-    # Not running (the session-start warm-up normally has it up): start it and wait, then send.
-    # The plugin doesn't wait on this process, and the request never touches disk or argv.
+def daemon_fingerprint():
+    """The running daemon's code fingerprint, "" for a daemon from before the handshake existed,
+    None when none is running."""
+    lines = []
+    if not send_to_daemon({"cmd": "hello"}, lines.append):
+        return None
+    return next((l.split(" ", 1)[1] for l in lines if l.startswith("daemon ")), "")
+
+
+def ensure_daemon(wait=True):
+    """Have a daemon from this copy's code running, replacing a stale one. With wait, block until it
+    answers (minutes on the very first run, while uv installs)."""
+    mine = code_fingerprint()
+    running = daemon_fingerprint()
+    if running == mine:
+        return True
+    if running is not None:  # stale: an older version, or code edited since it started
+        send_to_daemon({"cmd": "shutdown"}, lambda line: None)
+        deadline = time.time() + 5
+        while SOCKET.exists() and time.time() < deadline:
+            time.sleep(0.1)
+        STARTING.unlink(missing_ok=True)
+    start_daemon()
+    if not wait:
+        return False
     installing = not installed()
     if installing:
         print("installing-pocket", flush=True)
-    start_daemon()
     deadline = time.time() + (900 if installing else 45)
     while time.time() < deadline:
         time.sleep(0.5)
-        if send_to_daemon(request):
-            return
+        if daemon_fingerprint() == mine:
+            return True
+    return False
+
+
+def speak_pocket(reply):
+    # The plugin doesn't wait on this process, and the request never touches disk or argv.
+    options = plugin_options()
+    if ensure_daemon():
+        send_to_daemon({"text": reply, "options": options, "env": referenced_env(options)})
 
 
 def open_private_log():
@@ -383,10 +418,9 @@ def start_daemon(text=None):
 
 
 def warm():
-    """Session start: have the daemon up (installing on first use) before the first reply.
+    """Session start: have a current daemon up (installing on first use) before the first reply.
     Pocket TTS itself loads only when a reply needs it."""
-    if not send_to_daemon({"cmd": "ping"}):
-        start_daemon()
+    ensure_daemon(wait=False)
 
 
 def max_chars():

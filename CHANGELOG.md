@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-13
+
+### Fixed
+
+- The daemon is replaced automatically when the plugin updates. `speak.py` checks the running
+  daemon's code fingerprint (a hash of `speak.py` and `daemon.py`) with a `hello` before
+  each reply and at session start. A stale daemon, including one from 0.2.0 or 0.3.0 that
+  doesn't answer the handshake, is shut down and a current one started. No manual
+  `claude-speaks shutdown` is needed after an update; editing either file in development
+  restarts it too.
+
 ## [0.3.0] - 2026-10-13
 
 ### Added
@@ -66,7 +77,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional OpenAI-compatible HTTP engine (raw PCM or vLLM-Omni SSE) with Pocket fallback,
   and a Voxtral 4B compose file for a GPU server.
 
-[Unreleased]: https://github.com/aeriondyseti/claude-speaks/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/aeriondyseti/claude-speaks/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/aeriondyseti/claude-speaks/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/aeriondyseti/claude-speaks/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/aeriondyseti/claude-speaks/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/aeriondyseti/claude-speaks/releases/tag/v0.1.0

@@ -17,6 +17,7 @@ Status: not started. `speaks` 0.2.0 runs on Linux, WSL2 and macOS. On native Win
 - **On Windows, use TCP on `127.0.0.1`, port 0.** The daemon binds, then writes `{"port": N, "token": "<random 32 bytes hex>"}` to `daemon.json` in the state dir. That file must be readable by the current user only. The token matters: requests can carry the TTS API key, and on Windows any local process can reach a loopback port.
 - **Every request carries the token.** The daemon rejects a missing or wrong token and closes the connection.
 - **The protocol stays the same:** one JSON request, the client shuts its write side, and the daemon streams `installing-pocket` / `loading-pocket` / `pocket-ready` lines, then closes. `socket.SHUT_WR` exists on Windows.
+- **Keep the `hello` handshake** (0.3.1): `{"cmd": "hello"}` gets back `daemon <fingerprint>`, and `ensure_daemon()` replaces a daemon whose fingerprint differs from the client's. It must work unchanged over TCP, so a plugin update on Windows also replaces the running daemon.
 - **Hide the choice behind a small `transport` module** that both files use, so POSIX keeps AF_UNIX unchanged. The `os.chdir(STATE_DIR)` plus relative-name trick only exists for AF_UNIX's ~108-character path limit; don't apply it on Windows.
 - **File permissions need Windows handling.** `STATE_DIR.chmod(0o700)` and `SOCKET.chmod(0o600)` don't restrict access on Windows. Either rely on `%LOCALAPPDATA%` being per-user (it is, by ACL), or set an explicit ACL with `icacls`. Pick one and say which in the README.
 
