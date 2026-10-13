@@ -1,49 +1,63 @@
-# claude-speaks
+# speaks
 
-Reads Claude Code's replies aloud on WSL, using a Stop hook.
+A Claude Code plugin that reads Claude's replies aloud using [Pocket TTS](https://github.com/kyutai-labs/pocket-tts), a small text-to-speech model that runs locally on the CPU. Speech starts about 0.1 s after a reply finishes.
 
-`speak.py` (the hook) cleans the reply up for speech and passes it to `daemon.py`, a background process started on demand. The daemon tries these in order:
+Before speaking, it rewrites the reply so it sounds natural:
 
-1. **A GPU TTS server.** Any OpenAI-style `/v1/audio/speech` endpoint set in `~/.config/claude-speaks/config.json` (see `config.example.json`). It accepts raw PCM or vLLM-Omni's SSE stream.
-2. **Pocket TTS on the CPU.** Used when no server is set up or reachable. The model is loaded once and stays in memory.
-3. **Windows SAPI.** Only with `CLAUDE_SPEAKS_ENGINE=sapi`.
+| Written | Spoken |
+|---|---|
+| `~/.config/app/config.json` | home slash dot config slash app slash config dot jay sohn |
+| `b81be46c3777f8…cb970` | hash ending with bee nine seven zero |
+| `1.5×`, `0.12 s`, `~11.4 GB`, `9–12` | one point five times, zero point one two seconds, about eleven point four gigabytes, nine to twelve |
+| `RTX 5060 Ti`, `p99`, `v1.0`, `2.14.1` | ar tee ex fifty sixty tee eye, pee ninety nine, vee one point zero, two point fourteen point one |
+| `volume_db`, `db`, `TTY` | volume underscore dee bee, dee bee, tee tee why |
 
-- Removes markdown before speaking. Code blocks become "Code block omitted", tables are skipped, and links are read by their label.
-- Each new reply cuts off the one still playing. Long replies are cut short at about 600 characters.
+Code blocks and tables are skipped, links are read by their label, and long replies are cut off at about 600 characters.
 
 ## Install
 
-    uv sync        # pocket-tts with CPU-only torch (~1 GB)
-    ./install.sh   # adds the Stop hook to ~/.claude/settings.json (backup saved), links bin/claude-speaks into ~/.local/bin
+Requirements:
+- Linux or WSL2 with PulseAudio `paplay` (WSLg provides it)
+- `python3`
+- [`uv`](https://docs.astral.sh/uv/)
+
+Then run:
+
+    /plugin install speaks --marketplace aeriondyseti/aeriondyseti-plugins
+
+On the first session start, the plugin installs Pocket TTS with CPU-only PyTorch (~1 GB, into `~/.local/share/claude-speaks/venv`) in the background, then preloads the model. After that, each session's warm-up takes a few seconds.
 
 ## Use
 
-    claude-speaks off|on      # mute or unmute
-    claude-speaks stop        # cut off the current speech
-    claude-speaks say "hi"    # test it
-    claude-speaks shutdown    # unload the daemon (it restarts on the next reply)
+- **Plugin:** `/speaks on|off|stop|status`.
+- **Shell:** `bin/claude-speaks on|off|stop|status|say <text>|shutdown`.
 
-Env: `CLAUDE_SPEAKS_MAX_CHARS` (0 = no limit), `CLAUDE_SPEAKS_POCKET_VOICE` (default `alba`).
-`volume_db` in the config boosts loudness through a soft limiter (6 is a good start; 9–12 gets louder but flatter).
-Pronunciation fixes: `~/.config/claude-speaks/lexicon.json` maps whole words to spoken forms, e.g. `{"kubectl": "cube control"}`, merged over the built-ins (Ti, GPU, json, yaml, png, …). Lowercase keys match any case; others match exactly. Vowelless 2–5 letter words (db, cfg, RTX) are spelled out.
-Config is re-read on every reply, so you can switch servers or voices without restarting anything.
+`~/.config/claude-speaks/config.json` is re-read on every reply, so changes take effect immediately (see `config.example.json`):
+- **`pocket_voice`:** `eponine`, `azelma`, `eve`, `jane`, `vera`, `jean`, `marius` and others. Despite the name, `alba` (the default) is a male voice.
+- **`volume_db`:** gain applied through a soft limiter. 6 is a good start.
+- **`http_url`, `http_model`, `http_voice`, `http_sample_rate`:** send speech to an OpenAI-style `/v1/audio/speech` server instead (raw PCM or vLLM-Omni SSE). Pocket TTS is used whenever that server is unreachable.
 
-## GPU server: Voxtral 4B (manual trial)
+`~/.config/claude-speaks/lexicon.json` maps whole words to how they should be spoken, e.g. `{"kubectl": "cube control"}`. Your entries are merged over the built-ins. Lowercase keys match any case; other keys match exactly.
 
-`deploy/voxtral/compose.yaml` runs Mistral's Voxtral-4B-TTS in vLLM-Omni on the RTX 5060 Ti, at `127.0.0.1:18090`.
+The environment variable `CLAUDE_SPEAKS_MAX_CHARS` sets the cutoff (0 means no limit).
+
+## Without the plugin
+
+`uv sync && ./install.sh` registers `speak.py` as a classic `Stop` hook in `~/.claude/settings.json` instead.
+
+## GPU server: Voxtral 4B (optional)
+
+`deploy/voxtral/compose.yaml` runs Mistral's Voxtral-4B-TTS in vLLM-Omni on port 18090:
 
     hf download mistralai/Voxtral-4B-TTS-2603
-    GPU_UUID=GPU-... docker compose -f deploy/voxtral/compose.yaml up -d    # see `nvidia-smi -L`; ~4 min to load; the first request is slow while the GPU warms up
+    GPU_UUID=GPU-... docker compose -f deploy/voxtral/compose.yaml up -d    # see `nvidia-smi -L`; ~4 min to load
 
-Measured on the 5060 Ti:
-- Uses ~11.4 GB of VRAM.
-- First audio arrives in ~0.4 s once warm.
-- Generates speech about 1.7x faster than real time.
-
-English voices: `casual_female`, `casual_male`, `cheerful_female`, `neutral_female`, `neutral_male`.
+On an RTX 5060 Ti it uses ~11.4 GB of VRAM, and the first audio arrives in ~0.4 s once warm.
 
 Gotchas on WSL:
 - The container sees every GPU no matter what `device_ids` says, so the card is pinned with `CUDA_VISIBLE_DEVICES=<uuid>`.
 - Offline repo-ID lookup fails for Mistral-format models, so the model is given as its local snapshot path.
 
-Not managed by Quartermaster yet: that needs its Docker lifecycle and container GPU mapping (Milestones 9.2/9.5).
+## License
+
+MIT

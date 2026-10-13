@@ -4,7 +4,8 @@
 Engines: "pocket" (default) sends text to daemon.py, which keeps a Pocket TTS
 model loaded and is started on demand; "sapi" uses the Windows voices.
 
-Hook input arrives as JSON on stdin. The reply text comes from
+As a settings Stop hook, input arrives as JSON on stdin; the plugin passes
+`--stdin-text` with the reply itself. The reply text comes from
 `last_assistant_message` when present, otherwise from the transcript.
 
 Env:
@@ -31,6 +32,11 @@ SOCKET = STATE_DIR / "daemon.sock"
 STARTING = STATE_DIR / "daemon.starting"
 HERE = Path(__file__).resolve().parent
 PS1 = HERE / "say.ps1"
+# Kept outside the plugin folder so plugin updates don't throw away the ~1 GB install.
+VENV = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "claude-speaks/venv"
+UV_ENV = {**os.environ, "UV_PROJECT_ENVIRONMENT": str(VENV)}
+# Kept outside the plugin folder so plugin updates don't throw away the ~1 GB install.
+VENV = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "claude-speaks/venv"
 
 
 def last_reply_from_transcript(path):
@@ -254,14 +260,30 @@ def speak_pocket(text):
     if send_to_daemon({"text": text}):
         return
     # Not running: start it with this text queued (model load takes ~10s).
+    # First run installs pocket-tts (~1 GB) before the ~10s model load.
+    start_daemon(text)
+
+
+def start_daemon(text=None):
     if STARTING.exists() and time.time() - STARTING.stat().st_mtime < 60:
-        return
+        return  # already loading
     STARTING.touch()
     subprocess.Popen(
-        [str(HERE / ".venv/bin/python"), str(HERE / "daemon.py"), "--say", text],
-        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+        ["uv", "run", "--quiet", "--frozen", "--project", str(HERE), "python", str(HERE / "daemon.py")]
+        + (["--say", text] if text else []),
+        env=UV_ENV, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
         stderr=open(STATE_DIR / "daemon.log", "ab"), start_new_session=True,
     )
+
+
+def warm():
+    """Session start: install pocket-tts if needed (~1 GB, first run only), then preload the model."""
+    if send_to_daemon({"cmd": "ping"}):
+        return
+    with open(STATE_DIR / "install.log", "ab") as log:
+        subprocess.run(["uv", "sync", "--quiet", "--frozen", "--project", str(HERE)],
+                       env=UV_ENV, stdout=log, stderr=log, check=True)
+    start_daemon()
 
 
 def speak(text):
@@ -288,6 +310,21 @@ def main():
         return
     if sys.argv[1:] == ["--shutdown"]:
         send_to_daemon({"cmd": "shutdown"})
+        return
+    if sys.argv[1:] == ["--stdin-text"]:  # plugin hook: the reply as plain text
+        if not MUTE_FILE.exists():
+            text = truncate(to_speech(sys.stdin.read()), int(os.environ.get("CLAUDE_SPEAKS_MAX_CHARS", "600")))
+            if text:
+                speak(text)
+        return
+    if sys.argv[1:] == ["--warm"]:
+        warm()
+        return
+    if sys.argv[1:] == ["--stdin-text"]:  # plugin hook: the reply as plain text
+        if not MUTE_FILE.exists():
+            text = truncate(to_speech(sys.stdin.read()), int(os.environ.get("CLAUDE_SPEAKS_MAX_CHARS", "600")))
+            if text:
+                speak(text)
         return
     if len(sys.argv) > 1:  # direct use: speak.py "some text"
         speak(to_speech(" ".join(sys.argv[1:])))

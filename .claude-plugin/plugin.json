@@ -1,0 +1,8 @@
+{
+  "name": "speaks",
+  "version": "0.1.0",
+  "description": "Reads Claude's replies aloud with Pocket TTS (local CPU), cleaning up paths, numbers and jargon for speech.",
+  "author": { "name": "AerionDyseti" },
+  "repository": "https://github.com/aeriondyseti/claude-speaks",
+  "license": "MIT"
+}
