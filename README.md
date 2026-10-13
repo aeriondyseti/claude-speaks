@@ -90,6 +90,12 @@ Gotchas on WSL:
 - The container sees every GPU no matter what `device_ids` says, so the card is pinned with `CUDA_VISIBLE_DEVICES=<uuid>`.
 - Offline repo-ID lookup fails for Mistral-format models, so the model is given as its local snapshot path.
 
+## Development
+
+The text cleanup has its own tests, which need no audio device, model or daemon:
+
+    uv run --no-project --with pytest pytest
+
 ## License
 
 MIT

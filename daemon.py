@@ -16,7 +16,6 @@ Protocol: one JSON object per connection.
 """
 import argparse
 import queue
-import re
 import shutil
 import base64
 import json
@@ -34,7 +33,7 @@ warnings.filterwarnings("ignore")
 
 import numpy as np  # noqa: E402
 
-from speak import ENV_REF, code_fingerprint, max_chars, to_speech, truncate  # noqa: E402
+from speak import ENV_REF, code_fingerprint, max_chars, split_sentences, to_speech, truncate  # noqa: E402
 
 FINGERPRINT = code_fingerprint(Path(__file__).resolve().parent)  # of the code this process loaded
 
@@ -73,20 +72,6 @@ def expand_env(value, env, key):
     if isinstance(value, dict):
         return {k: expand_env(v, env, key) for k, v in value.items()}
     return value
-
-
-def split_sentences(text):
-    parts = []
-    for p in re.split(r"(?<=[.!?])\s+", text):
-        # A wordless piece ("...") gets no audio from Kokoro, which reads as a failure; join it on
-        if parts and not re.search(r"\w", parts[-1]):
-            parts[-1] += " " + p
-        elif p.strip():
-            parts.append(p.strip())
-    if len(parts) > 1 and not re.search(r"\w", parts[-1]):
-        tail = parts.pop()
-        parts[-1] += " " + tail
-    return parts or [text]
 
 
 def extra_body(cfg):

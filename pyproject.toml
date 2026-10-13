@@ -18,3 +18,8 @@ torch = [{ index = "pytorch-cpu" }]
 
 [tool.uv]
 package = false
+
+[tool.pytest.ini_options]
+# uv run --no-project --with pytest pytest  (speak.py is standard library only)
+pythonpath = ["."]
+testpaths = ["tests"]

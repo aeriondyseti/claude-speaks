@@ -282,6 +282,20 @@ def truncate(text, limit):
     return (cut[: end + 1] if end > limit // 3 else cut) + " ... and more on screen."
 
 
+def split_sentences(text):
+    parts = []
+    for p in re.split(r"(?<=[.!?])\s+", text):
+        # A wordless piece ("...") gets no audio from Kokoro, which reads as a failure; join it on
+        if parts and not re.search(r"\w", parts[-1]):
+            parts[-1] += " " + p
+        elif p.strip():
+            parts.append(p.strip())
+    if len(parts) > 1 and not re.search(r"\w", parts[-1]):
+        tail = parts.pop()
+        parts[-1] += " " + tail
+    return parts or [text]
+
+
 def stop_current():
     try:
         pid = int(PID_FILE.read_text())
