@@ -313,18 +313,43 @@ def truncate(text, limit):
     return (cut[: end + 1] if end > limit // 3 else cut) + " ... and more on screen."
 
 
+# A period after these doesn't end a sentence ("Mr. Smith", "e.g. this"); splitting there would
+# send each half as its own request and break the intonation.
+NOT_SENTENCE_END = re.compile(r"(?:^|\s)(?:e\.g|i\.e|mr|mrs|ms|dr|vs|etc|cf|approx)\.$", re.I)
+FIRST_CLAUSES = 100  # characters: a longer first sentence is sent in clause-sized pieces
+
+
+def split_clauses(sentence, size=FIRST_CLAUSES):
+    """Pieces of about `size` characters, split after , ; : or a dash; joined, they give back
+    the sentence. Short sentences come back whole."""
+    if len(sentence) <= size:
+        return [sentence]
+    pieces = []
+    for clause in re.split(r"(?<=[,;:—–])\s+", sentence):
+        if pieces and len(pieces[-1]) + 1 + len(clause) <= size:
+            pieces[-1] += " " + clause
+        else:
+            pieces.append(clause)
+    return pieces
+
+
 def split_sentences(text):
+    """Requests for the TTS server: one per sentence, so the first audio waits for one
+    sentence's synthesis, and a long first sentence in clauses, so it waits for less."""
     parts = []
     for p in re.split(r"(?<=[.!?])\s+", text):
         # A wordless piece ("...") gets no audio from Kokoro, which reads as a failure; join it on
-        if parts and not re.search(r"\w", parts[-1]):
+        if parts and (not re.search(r"\w", parts[-1]) or NOT_SENTENCE_END.search(parts[-1])):
             parts[-1] += " " + p
         elif p.strip():
             parts.append(p.strip())
     if len(parts) > 1 and not re.search(r"\w", parts[-1]):
         tail = parts.pop()
         parts[-1] += " " + tail
-    return parts or [text]
+    if not parts:
+        return [text]
+    # Later sentences are fetched while earlier ones play, so only the first one's length is heard
+    return [p for p in split_clauses(parts[0]) if p] + parts[1:]
 
 
 def stop_current():

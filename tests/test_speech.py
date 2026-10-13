@@ -149,3 +149,30 @@ def test_plugin_defaults_match_speak_py():
 ])
 def test_markdown(md, spoken):
     assert to_speech(md) == spoken
+
+
+@pytest.mark.parametrize("text,sentences", [
+    ("Mr. Smith arrived. He sat.", ["Mr. Smith arrived.", "He sat."]),
+    ("Use a flag, e.g. this one. Done.", ["Use a flag, e.g. this one.", "Done."]),
+    ("Tabs vs. spaces, i.e. war. Next.", ["Tabs vs. spaces, i.e. war.", "Next."]),
+    ("Is it? No. Then go.", ["Is it?", "No.", "Then go."]),
+])
+def test_split_sentences_keeps_abbreviations(text, sentences):
+    assert split_sentences(text) == sentences
+
+
+def test_long_first_sentence_is_sent_in_clauses():
+    first = ("I read your rules in the settings file, with the debug log on, and here is a passage "
+             "that hits each one; it covers paths, numbers and hashes, plus some edge cases.")
+    later = ("This second sentence is long as well, with several commas in it, but it is fetched "
+             "while the first one plays, so it stays whole.")
+    parts = split_sentences(f"{first} {later}")
+    assert parts[-1] == later
+    assert len(parts) > 2 and all(len(p) <= 100 for p in parts[:-1])
+    assert " ".join(parts[:-1]) == first
+    assert all(p.rstrip().endswith((",", ";")) for p in parts[:-2])  # split at clause ends only
+
+
+def test_long_first_sentence_without_clauses_stays_whole():
+    first = "A" * 150 + "."
+    assert split_sentences(first + " Next.") == [first, "Next."]

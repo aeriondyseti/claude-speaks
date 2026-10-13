@@ -49,6 +49,8 @@ With `http_split_sentences`, first audio waits for the first sentence's synthesi
 - Splitting changes prosody at the join; listen to a few with Kokoro before settling the threshold.
 - **Don't split after abbreviations** (from alphabet/speak): `Mr. Smith arrived.` is sent as "Mr." and "Smith arrived.", and `e.g. this, i.e. that` likewise. Keep a small list (e.g., i.e., Mr., Mrs., Dr., vs., etc.) that never ends a sentence.
 
+Done, narrowed: only the **first** sentence is split, into pieces of up to 100 characters (`FIRST_CLAUSES`), because later ones are synthesised while earlier ones play. Measured against Kokoro-FastAPI: a 212-character first sentence gave first audio after 2.7 s; its 104-character first clause, after 1.07 s. Abbreviations never end a sentence ("no" is left off the list: "The answer is no." is far more common than "No. 5").
+
 ## 4. Smaller ideas (decide, then do or drop)
 
 - ~~Silence instead of "Code block omitted."~~ Decided against: the sentence stays.
