@@ -86,8 +86,8 @@ def spell(chars):
     return " ".join(LETTERS.get(c.lower(), c) for c in chars)
 
 
-def load_lexicon():
-    lex = dict(LEXICON)
+def load_lexicon(base=None):
+    lex = dict(LEXICON if base is None else base)
     path = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "claude-speaks/lexicon.json"
     try:
         lex.update(json.loads(path.read_text()))
@@ -100,7 +100,9 @@ def speak_identifier(m):
     """snake_case -> words joined by "underscore"; vowelless bits like db/sm are spelled out."""
     parts = m.group().split("_")
     return " underscore ".join(
-        spell(p) if len(p) <= 4 and p.isalpha() and not re.search(r"[aeiouy]", p, re.I) else p for p in parts
+        spell(p) if len(p) <= 4 and p.isalpha() and not re.search(r"[aeiouy]", p, re.I)
+        else p.lower() if p.isupper() else p  # MAX_CHARS: words, not letters (Kokoro spells all caps)
+        for p in parts
     )
 
 
@@ -143,6 +145,8 @@ LEXICON = {"Ti": "tee eye", "gpu": "gee pee you", "cpu": "see pee you", "vram": 
            # words Pocket can't sound out
            "gym": "jim", "hmm": "hum", "shh": "shush", "nth": "enth", "brr": "burr",
            "mr": "mister", "mrs": "missus", "dr": "doctor"}
+# Kokoro's own G2P handles abbreviations, file types and separators; it only needs these.
+KOKORO_LEXICON = {"Ti": "tee eye"}
 # Vowelless words to leave alone rather than spell (ambiguous: St = street/saint, Ms = miz/milliseconds).
 SAY_AS_WORD = {"st", "ms", "psst", "pfft"}
 UNIT_RE = r"%|[KMGT]i?B|ms|s|[kMG]?Hz|dB"
@@ -189,32 +193,42 @@ def speak_number(m):
     return words
 
 
-def to_speech(md):
+def to_speech(md, profile="pocket"):
+    """profile "pocket": spell everything out; "kokoro": only what Kokoro's own G2P gets wrong."""
+    full = profile != "kokoro"
     text = re.sub(r"```.*?(```|$)", "\nCode block omitted.\n", md, flags=re.S)
     text = "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("|"))  # tables
     text = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", text)  # links/images -> label
     text = re.sub(r"https?://\S+", "a link", text)
-    text = PATH.sub(speak_path, text)
     text = UUID.sub(speak_hash, text)
     text = HEX_HASH.sub(speak_hash, text)
+    if full:
+        text = PATH.sub(speak_path, text)
+    else:
+        text = re.sub(r"(?<![\w/])(?:~|\$HOME)(?=/)", "home", text)
+        # Kokoro drops dots, dashes and (after "home") slashes inside paths
+        text = PATH.sub(lambda m: " " + re.sub(r"[./-]", lambda c: {".": " dot ", "/": " slash ", "-": " dash "}[c[0]], m[0]) + " ", text)
     text = re.sub(r"\$HOME\b", "home", text)
     text = re.sub(r"\b[A-Za-z0-9]+(?:_[A-Za-z0-9]+)+\b", speak_identifier, text)
+    text = re.sub(r"(?<=\w)\(\)", "", text)  # stop() -> stop; a bare ")" reads as a sentence end
     text = re.sub(r"~(?=\d)", "about ", text)
     text = re.sub(r"(?<=\d)\s?[–—-]\s?(?=\d)", " to ", text)  # ranges: 9–12
     text = VERSION.sub(speak_version, text)
-    text = re.sub(r"\b([A-Za-z])(\d+)\b", lambda m: f"{LETTERS[m[1].lower()]} {m[2]}", text)  # p99, x86
+    if full:
+        text = re.sub(r"\b([A-Za-z])(\d+)\b", lambda m: f"{LETTERS[m[1].lower()]} {m[2]}", text)  # p99, x86
     text = re.sub(r"(?<![\w.-])-(?=\d)", "minus ", text)
     text = NUMBER.sub(speak_number, text)
-    lexicon = load_lexicon()
+    lexicon = load_lexicon(LEXICON if full else KOKORO_LEXICON)
     folded = {k: v for k, v in lexicon.items() if k == k.lower()}
     for keys, flags, look in ((lexicon.keys() - folded.keys(), 0, lexicon), (folded.keys(), re.I, folded)):
         if keys:
             words = re.compile(r"(?<![\w-])(" + "|".join(map(re.escape, sorted(keys, key=len, reverse=True))) + r")(?![\w-])", flags)
             text = words.sub(lambda m, look=look, flags=flags: look[m[1].lower() if flags else m[1]], text)
-    # Vowelless 2-5 letter words are abbreviations: db, cfg, RTX, HTML -> spelled out
-    text = re.sub(r"(?<![\w-])[b-df-hj-np-tv-xzB-DF-HJ-NP-TV-XZ]{2,5}(?![\w-])",
-                  lambda m: m[0] if m[0].lower() in SAY_AS_WORD else spell(m[0]), text)
-    text = re.sub(r"(?<![\w-])(?=[A-Z]*Y)[B-DF-HJ-NP-TV-Z]{2,5}(?![\w-])", lambda m: spell(m[0]), text)  # TTY, NYC
+    if full:
+        # Vowelless 2-5 letter words are abbreviations: db, cfg, RTX, HTML -> spelled out
+        text = re.sub(r"(?<![\w-])[b-df-hj-np-tv-xzB-DF-HJ-NP-TV-XZ]{2,5}(?![\w-])",
+                      lambda m: m[0] if m[0].lower() in SAY_AS_WORD else spell(m[0]), text)
+        text = re.sub(r"(?<![\w-])(?=[A-Z]*Y)[B-DF-HJ-NP-TV-Z]{2,5}(?![\w-])", lambda m: spell(m[0]), text)  # TTY, NYC
     text = re.sub(r"`([^`]*)`", r"\1", text)
     text = re.sub(r"^\s{0,3}#{1,6}\s*", "", text, flags=re.M)  # headings
     text = re.sub(r"^\s*([-*+]|\d+\.)\s+", "", text, flags=re.M)  # list markers
