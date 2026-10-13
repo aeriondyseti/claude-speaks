@@ -306,6 +306,21 @@ def send_to_daemon(req):
         return False
 
 
+# ${VAR} / ${VAR:-default} in settings, as in Claude Code's .mcp.json. Expanded by the daemon at
+# the moment it builds a request; only the variables a setting names are sent with each reply.
+ENV_REF = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
+CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "claude-speaks/config.json"
+
+
+def referenced_env(options):
+    try:
+        config_text = CONFIG.read_text()
+    except OSError:
+        config_text = ""
+    names = {m[1] for m in ENV_REF.finditer(json.dumps(options) + config_text)}
+    return {n: os.environ[n] for n in names if n in os.environ}
+
+
 def plugin_options():
     """The plugin's userConfig values, handed over by the hook in CLAUDE_SPEAKS_OPTIONS."""
     try:
@@ -315,7 +330,8 @@ def plugin_options():
 
 
 def speak_pocket(reply):
-    request = {"text": reply, "options": plugin_options()}
+    options = plugin_options()
+    request = {"text": reply, "options": options, "env": referenced_env(options)}
     if send_to_daemon(request):
         return
     # Not running (the session-start warm-up normally has it up): start it and wait, then send.

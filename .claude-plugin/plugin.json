@@ -11,13 +11,13 @@
     "http_url": {
       "type": "string",
       "title": "TTS server URL",
-      "description": "An OpenAI-style /v1/audio/speech endpoint, e.g. http://127.0.0.1:8880/v1/audio/speech for Kokoro-FastAPI. Empty: Pocket TTS only. Pocket also speaks whenever a request fails.",
+      "description": "An OpenAI-style /v1/audio/speech endpoint, e.g. http://127.0.0.1:8880/v1/audio/speech for Kokoro-FastAPI. Empty: Pocket TTS only. Pocket also speaks whenever a request fails. ${VAR} and ${VAR:-default} are expanded here and in every http_* option.",
       "default": ""
     },
     "http_api_key": {
       "type": "string",
       "title": "TTS server API key",
-      "description": "Sent as 'Authorization: Bearer <key>'. Leave empty for a local server.",
+      "description": "Sent as 'Authorization: Bearer <key>'. A literal key, or ${ENV_VAR} to read it from the environment at request time. Leave empty for a local server.",
       "sensitive": true,
       "default": ""
     },

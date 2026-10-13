@@ -34,7 +34,7 @@ warnings.filterwarnings("ignore")
 import numpy as np  # noqa: E402
 from pocket_tts import TTSModel  # noqa: E402
 
-from speak import DEFAULT_REPLACEMENTS, max_chars, to_speech, truncate  # noqa: E402
+from speak import DEFAULT_REPLACEMENTS, ENV_REF, max_chars, to_speech, truncate  # noqa: E402
 
 STATE_DIR = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "claude-speaks"
 SOCKET = STATE_DIR / "daemon.sock"
@@ -54,6 +54,23 @@ def load_config(options=None):
         cfg = {}
     cfg.update({k: v for k, v in (options or {}).items() if v != ""})
     return cfg
+
+
+def expand_env(value, env, key):
+    """Expand ${VAR} / ${VAR:-default} in a setting; an unset VAR with no default is empty."""
+    if isinstance(value, str):
+        def sub(m):
+            if m[1] in env:
+                return env[m[1]]
+            if m[2] is None:
+                log(f"{key} names ${{{m[1]}}}, which is not set")
+            return m[2] or ""
+        return ENV_REF.sub(sub, value)
+    if isinstance(value, list):
+        return [expand_env(v, env, key) for v in value]
+    if isinstance(value, dict):
+        return {k: expand_env(v, env, key) for k, v in value.items()}
+    return value
 
 
 def extra_body(cfg):
@@ -127,7 +144,7 @@ class Speaker:
         if self.player:
             self.player.kill()
 
-    def say(self, reply, voice=None, options=None):
+    def say(self, reply, voice=None, options=None, env=None):
         self.stop()
         with self.lock:  # wait for the previous job to unwind
             self.stop_event = stop = threading.Event()
@@ -135,10 +152,13 @@ class Speaker:
             limit = int(cfg.get("max_chars", max_chars()))
             rules = cfg.get("replacements", DEFAULT_REPLACEMENTS)
             try:
+                url_as_written = cfg.get("http_url")  # logged instead of the expansion, which may hold a key
+                if url_as_written:
+                    cfg = {k: expand_env(v, env or {}, k) if k.startswith("http_") else v for k, v in cfg.items()}
                 if cfg.get("http_url"):
                     text = truncate(to_speech(reply, cfg.get("http_text_profile", "kokoro"), rules), limit)
                     if not text or self.say_http(cfg, text, stop):
-                        log(f"spoke via {cfg['http_url']}")
+                        log(f"spoke via {url_as_written}")
                         return
                     log("http engine failed; falling back to Pocket")
                 text = truncate(to_speech(reply, "pocket", rules), limit)
@@ -219,7 +239,7 @@ def serve(initial_text=None):
             if cmd == "stop":
                 speaker.stop()
             elif req.get("text"):
-                threading.Thread(target=speaker.say, args=(req["text"], req.get("voice"), req.get("options")), daemon=True).start()
+                threading.Thread(target=speaker.say, args=(req["text"], req.get("voice"), req.get("options"), req.get("env")), daemon=True).start()
     finally:
         SOCKET.unlink(missing_ok=True)
 

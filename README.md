@@ -43,7 +43,7 @@ As a plugin, everything is a plugin option, set when you install it or later in 
 | `max_chars` | `600` | Characters spoken per reply (0 means no limit) |
 | `replacements` | the light rules | `find => replace`, one per entry, applied first under every profile. A plain word matches whole words (any case when written in lowercase); `/regex/` is a pattern. Defaults: `Ti => tee eye`, `~/` and `$HOME` → home, `~` before a number → about, `9–12` → 9 to 12, and dropping empty `()`. Add your own, e.g. `kubectl => cube control`. |
 | `http_url` | empty | An OpenAI-style `/v1/audio/speech` endpoint. Empty means Pocket only. |
-| `http_api_key` | empty | Sent as `Authorization: Bearer <key>`. A sensitive option, kept in secure storage. |
+| `http_api_key` | empty | Sent as `Authorization: Bearer <key>`. A sensitive option, kept in secure storage; or `${ENV_VAR}` |
 | `http_headers` | empty | Extra headers, `Name: value` each |
 | `http_model`, `http_voice` | empty | The request's `model` and `voice` |
 | `http_sample_rate`, `http_timeout` | `24000`, `10` | The PCM rate in Hz, and the seconds to wait before falling back |
@@ -53,6 +53,8 @@ As a plugin, everything is a plugin option, set when you install it or later in 
 The rules that need code rather than a find-and-replace are built in: numbers, units and versions as words, hashes as "hash ending with …", and dots, dashes, slashes and underscores read inside paths and names. Under the `pocket` profile, `~/.config/claude-speaks/lexicon.json` (`{"word": "spoken"}`) still adds whole-word fixes.
 
 ### Using a TTS server
+
+Any `http_*` setting can name environment variables as `${VAR}` or `${VAR:-default}`, as in Claude Code's `.mcp.json`, e.g. `http_api_key` = `${OPENAI_API_KEY}`. They're read from Claude Code's environment on each reply and expanded only when the request is built. Only the variables a setting names are passed along, and an unset one with no default expands to empty (`daemon.log` names it, never a value).
 
 With `http_url` set, speech goes to the server, which can return raw PCM or vLLM-Omni's SSE stream. A request that fails (unreachable, an HTTP error, or no audio) falls back to Pocket TTS for that reply. `~/.local/state/claude-speaks/daemon.log` records which engine spoke.
 

@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Plugin options for everything, including an OpenAI-style TTS server: URL, API key (a
   sensitive option), extra headers, model, voice, sample rate, timeout, extra body JSON,
   and which text rules it gets. Options override `config.json`.
+- `${VAR}` / `${VAR:-default}` in any `http_*` setting, read from Claude Code's environment
+  per reply and expanded only when the request is built.
 - `replacements`: user-editable `find => replace` rules (whole words or `/regex/`),
   pre-filled with the light rules.
 - A light `kokoro` text profile for servers like Kokoro-FastAPI, which keeps only what
