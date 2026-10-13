@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
-"""Claude Code Stop hook: read Claude's last reply aloud via Windows SAPI (WSL).
+"""Claude Code Stop hook: read Claude's last reply aloud (WSL).
+
+Engines: "pocket" (default) sends text to daemon.py, which keeps a Pocket TTS
+model loaded and is started on demand; "sapi" uses the Windows voices.
 
 Hook input arrives as JSON on stdin. The reply text comes from
 `last_assistant_message` when present, otherwise from the transcript.
 
 Env:
   CLAUDE_SPEAKS_MAX_CHARS  truncate spoken text (default 600, 0 = no limit)
+  CLAUDE_SPEAKS_ENGINE     pocket | sapi
+  CLAUDE_SPEAKS_POCKET_VOICE  Pocket TTS voice (default alba; read by the daemon)
   CLAUDE_SPEAKS_VOICE      SAPI voice name, e.g. "Microsoft Zira Desktop"
   CLAUDE_SPEAKS_RATE       -10..10 (default 1)
 """
@@ -13,6 +18,7 @@ import json
 import os
 import re
 import signal
+import socket
 import subprocess
 import sys
 import time
@@ -21,7 +27,10 @@ from pathlib import Path
 STATE_DIR = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "claude-speaks"
 MUTE_FILE = STATE_DIR / "muted"
 PID_FILE = STATE_DIR / "speaker.pid"
-PS1 = Path(__file__).resolve().parent / "say.ps1"
+SOCKET = STATE_DIR / "daemon.sock"
+STARTING = STATE_DIR / "daemon.starting"
+HERE = Path(__file__).resolve().parent
+PS1 = HERE / "say.ps1"
 
 
 def last_reply_from_transcript(path):
@@ -88,8 +97,36 @@ def stop_current():
     PID_FILE.unlink(missing_ok=True)
 
 
+def send_to_daemon(req):
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+            s.settimeout(2)
+            s.connect(str(SOCKET))
+            s.sendall(json.dumps(req).encode("utf-8"))
+        return True
+    except OSError:
+        return False
+
+
+def speak_pocket(text):
+    if send_to_daemon({"text": text}):
+        return
+    # Not running: start it with this text queued (model load takes ~10s).
+    if STARTING.exists() and time.time() - STARTING.stat().st_mtime < 60:
+        return
+    STARTING.touch()
+    subprocess.Popen(
+        [str(HERE / ".venv/bin/python"), str(HERE / "daemon.py"), "--say", text],
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+        stderr=open(STATE_DIR / "daemon.log", "ab"), start_new_session=True,
+    )
+
+
 def speak(text):
     stop_current()
+    if os.environ.get("CLAUDE_SPEAKS_ENGINE", "pocket") == "pocket":
+        speak_pocket(text)
+        return
     proc = subprocess.Popen(
         ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
          "-File", subprocess.check_output(["wslpath", "-w", str(PS1)], text=True).strip()],
@@ -103,6 +140,13 @@ def speak(text):
 
 def main():
     STATE_DIR.mkdir(parents=True, exist_ok=True)
+    if sys.argv[1:] == ["--stop"]:
+        stop_current()
+        send_to_daemon({"cmd": "stop"})
+        return
+    if sys.argv[1:] == ["--shutdown"]:
+        send_to_daemon({"cmd": "shutdown"})
+        return
     if len(sys.argv) > 1:  # direct use: speak.py "some text"
         speak(to_speech(" ".join(sys.argv[1:])))
         return

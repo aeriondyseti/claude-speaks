@@ -1,22 +1,18 @@
 #!/usr/bin/env bash
-# claude-speaks on|off|stop|status|say <text>
+# claude-speaks on|off|stop|status|say <text>|shutdown
 set -euo pipefail
 here="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 state="${XDG_STATE_HOME:-$HOME/.local/state}/claude-speaks"
 mkdir -p "$state"
 
-stop() {
-  if [[ -f $state/speaker.pid ]]; then
-    kill -- "-$(cat "$state/speaker.pid")" 2>/dev/null || true
-    rm -f "$state/speaker.pid"
-  fi
-}
+stop() { python3 "$here/speak.py" --stop; }
 
 case "${1:-status}" in
   on)     rm -f "$state/muted"; echo "claude-speaks: on" ;;
   off)    touch "$state/muted"; stop; echo "claude-speaks: off" ;;
   stop)   stop ;;
+  shutdown) python3 "$here/speak.py" --shutdown ;;  # unload the Pocket TTS daemon
   say)    shift; python3 "$here/speak.py" "$*" ;;
   status) [[ -f $state/muted ]] && echo "claude-speaks: off" || echo "claude-speaks: on" ;;
-  *)      echo "usage: claude-speaks on|off|stop|status|say <text>" >&2; exit 1 ;;
+  *)      echo "usage: claude-speaks on|off|stop|status|say <text>|shutdown" >&2; exit 1 ;;
 esac
