@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Keeps a Pocket TTS model loaded and speaks text sent over a unix socket.
+"""Speaks text sent over a unix socket.
+
+Uses an OpenAI-compatible /v1/audio/speech server when one is configured and
+reachable (e.g. a GPU container), otherwise a Pocket TTS model kept loaded here.
+Config is re-read on every request from ~/.config/claude-speaks/config.json:
+  {"http_url": "http://127.0.0.1:18090/v1/audio/speech", "http_model": "...",
+   "http_voice": "casual_female", "http_sample_rate": 24000, "pocket_voice": "alba"}
 
 Protocol: one JSON object per connection.
   {"text": "...", "voice": "alba"}  speak (interrupts anything playing)
@@ -12,6 +18,7 @@ import os
 import socket
 import subprocess
 import threading
+import urllib.request
 import warnings
 from pathlib import Path
 
@@ -22,7 +29,22 @@ from pocket_tts import TTSModel  # noqa: E402
 
 STATE_DIR = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "claude-speaks"
 SOCKET = STATE_DIR / "daemon.sock"
+CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "claude-speaks/config.json"
 DEFAULT_VOICE = os.environ.get("CLAUDE_SPEAKS_POCKET_VOICE", "alba")
+
+
+def load_config():
+    try:
+        return json.loads(CONFIG.read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def play(rate):
+    return subprocess.Popen(
+        ["paplay", "--raw", "--format=s16le", "--channels=1", f"--rate={rate}"],
+        stdin=subprocess.PIPE, stderr=subprocess.DEVNULL,
+    )
 
 
 class Speaker:
@@ -48,21 +70,42 @@ class Speaker:
         self.stop()
         with self.lock:  # wait for the previous job to unwind
             self.stop_event = stop = threading.Event()
-            state = self.voice(voice or DEFAULT_VOICE)
-            self.player = player = subprocess.Popen(
-                ["paplay", "--raw", "--format=s16le", "--channels=1", f"--rate={self.model.sample_rate}"],
-                stdin=subprocess.PIPE, stderr=subprocess.DEVNULL,
-            )
+            cfg = load_config()
             try:
-                for chunk in self.model.generate_audio_stream(state, text, stop=stop):
-                    if stop.is_set():
-                        break
-                    pcm = (np.clip(chunk.detach().cpu().numpy(), -1, 1) * 32767).astype("<i2")
-                    player.stdin.write(pcm.tobytes())
-                player.stdin.close()
+                if cfg.get("http_url") and self.say_http(cfg, text, stop):
+                    return
+                self.say_pocket(text, voice or cfg.get("pocket_voice") or DEFAULT_VOICE, stop)
             except (BrokenPipeError, OSError):
                 pass
 
+    def say_http(self, cfg, text, stop):
+        """Stream PCM from the server. False means unreachable: fall back to Pocket."""
+        body = {"input": text, "stream": True, "response_format": "pcm",
+                "model": cfg.get("http_model"), "voice": cfg.get("http_voice")}
+        req = urllib.request.Request(
+            cfg["http_url"], data=json.dumps({k: v for k, v in body.items() if v}).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        try:
+            resp = urllib.request.urlopen(req, timeout=cfg.get("http_timeout", 10))
+        except OSError:
+            return False
+        with resp:
+            self.player = player = play(cfg.get("http_sample_rate", 24000))
+            while not stop.is_set() and (data := resp.read1(8192)):
+                player.stdin.write(data)
+            player.stdin.close()
+        return True
+
+    def say_pocket(self, text, voice, stop):
+        state = self.voice(voice)
+        self.player = player = play(self.model.sample_rate)
+        for chunk in self.model.generate_audio_stream(state, text, stop=stop):
+            if stop.is_set():
+                break
+            pcm = (np.clip(chunk.detach().cpu().numpy(), -1, 1) * 32767).astype("<i2")
+            player.stdin.write(pcm.tobytes())
+        player.stdin.close()
 
 def serve(initial_text=None):
     STATE_DIR.mkdir(parents=True, exist_ok=True)
