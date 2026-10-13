@@ -1,8 +1,11 @@
 {
-  "http_url": "http://127.0.0.1:18090/v1/audio/speech",
-  "http_model": "mistralai/Voxtral-4B-TTS-2603",
-  "http_voice": "casual_female",
-  "http_sample_rate": 24000,
+  "pocket_voice": "eponine",
   "volume_db": 6,
-  "pocket_voice": "eponine"
+  "max_chars": 600,
+  "http_url": "http://127.0.0.1:8880/v1/audio/speech",
+  "http_model": "kokoro",
+  "http_voice": "af_heart",
+  "http_sample_rate": 24000,
+  "http_text_profile": "kokoro",
+  "http_extra": { "normalization_options": { "normalize": false } }
 }

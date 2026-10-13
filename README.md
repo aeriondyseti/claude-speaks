@@ -35,11 +35,25 @@ On the first session start, the plugin installs Pocket TTS with CPU-only PyTorch
 `~/.config/claude-speaks/config.json` is re-read on every reply, so changes take effect immediately (see `config.example.json`):
 - **`pocket_voice`:** `eponine`, `azelma`, `eve`, `jane`, `vera`, `jean`, `marius` and others. Despite the name, `alba` (the default) is a male voice.
 - **`volume_db`:** gain applied through a soft limiter. 6 is a good start.
-- **`http_url`, `http_model`, `http_voice`, `http_sample_rate`:** send speech to an OpenAI-style `/v1/audio/speech` server instead (raw PCM or vLLM-Omni SSE). Pocket TTS is used whenever that server is unreachable.
+- **`max_chars`:** the cutoff for long replies (default 600; 0 means no limit).
+
+### Using a TTS server
+
+Set `http_url` to any OpenAI-style `/v1/audio/speech` endpoint, and speech goes there. It accepts raw PCM or vLLM-Omni's SSE stream. If `http_url` isn't set, or a request fails (unreachable, an HTTP error, or no audio), that reply falls back to Pocket TTS. `~/.local/state/claude-speaks/daemon.log` records which engine spoke.
+
+| Key | Meaning |
+|---|---|
+| `http_url`, `http_model`, `http_voice`, `http_sample_rate` | Where to send speech, and with what model, voice and sample rate |
+| `http_text_profile` | The text rules the server gets. `kokoro` (the default) keeps only what Kokoro's own pronunciation gets wrong, such as hashes, `~`, numbers, units and the separators in paths. `pocket` spells everything out. |
+| `http_extra` | Merged into the request body, e.g. `{"normalization_options": {"normalize": false}}` so Kokoro-FastAPI doesn't rewrite the text a second time |
+
+[Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI) works as-is:
+
+    docker run --gpus all -p 127.0.0.1:8880:8880 ghcr.io/remsky/kokoro-fastapi-gpu:latest   # use :latest-cu128 on RTX 50-series
+
+`config.example.json` holds matching settings, using the `af_heart` voice.
 
 `~/.config/claude-speaks/lexicon.json` maps whole words to how they should be spoken, e.g. `{"kubectl": "cube control"}`. Your entries are merged over the built-ins. Lowercase keys match any case; other keys match exactly.
-
-The environment variable `CLAUDE_SPEAKS_MAX_CHARS` sets the cutoff (0 means no limit).
 
 ## Without the plugin
 

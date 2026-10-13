@@ -6,7 +6,10 @@ reachable (e.g. a GPU container), otherwise a Pocket TTS model kept loaded here.
 Config is re-read on every request from ~/.config/claude-speaks/config.json:
   {"http_url": "http://127.0.0.1:18090/v1/audio/speech", "http_model": "...",
    "http_voice": "casual_female", "http_sample_rate": 24000, "pocket_voice": "alba",
-   "volume_db": 6}
+   "volume_db": 6, "max_chars": 600,
+   "http_text_profile": "kokoro",          # text rules for the server; Pocket always gets "pocket"
+   "http_extra": {"normalization_options": {"normalize": false}}}  # merged into the request body
+Requests carry the raw reply; it is cleaned up and truncated here, per engine.
 
 Protocol: one JSON object per connection.
   {"text": "...", "voice": "alba"}  speak (interrupts anything playing)
@@ -19,7 +22,9 @@ import json
 import os
 import socket
 import subprocess
+import sys
 import threading
+import time
 import urllib.request
 import warnings
 from pathlib import Path
@@ -29,10 +34,16 @@ warnings.filterwarnings("ignore")
 import numpy as np  # noqa: E402
 from pocket_tts import TTSModel  # noqa: E402
 
+from speak import max_chars, to_speech, truncate  # noqa: E402
+
 STATE_DIR = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "claude-speaks"
 SOCKET = STATE_DIR / "daemon.sock"
 CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "claude-speaks/config.json"
 DEFAULT_VOICE = os.environ.get("CLAUDE_SPEAKS_POCKET_VOICE", "alba")
+
+
+def log(msg):
+    print(time.strftime("%H:%M:%S"), msg, file=sys.stderr, flush=True)  # stderr is daemon.log
 
 
 def load_config():
@@ -91,30 +102,39 @@ class Speaker:
         if self.player:
             self.player.kill()
 
-    def say(self, text, voice=None):
+    def say(self, reply, voice=None):
         self.stop()
         with self.lock:  # wait for the previous job to unwind
             self.stop_event = stop = threading.Event()
             cfg = load_config()
+            limit = cfg.get("max_chars", max_chars())
             try:
-                if cfg.get("http_url") and self.say_http(cfg, text, stop):
-                    return
-                self.say_pocket(text, voice or cfg.get("pocket_voice") or DEFAULT_VOICE, stop, cfg.get("volume_db", 0))
+                if cfg.get("http_url"):
+                    text = truncate(to_speech(reply, cfg.get("http_text_profile", "kokoro")), limit)
+                    if not text or self.say_http(cfg, text, stop):
+                        log(f"spoke via {cfg['http_url']}")
+                        return
+                    log("http engine failed; falling back to Pocket")
+                text = truncate(to_speech(reply, "pocket"), limit)
+                if text:
+                    self.say_pocket(text, voice or cfg.get("pocket_voice") or DEFAULT_VOICE, stop, cfg.get("volume_db", 0))
             except (BrokenPipeError, OSError):
                 pass
 
     def say_http(self, cfg, text, stop):
-        """Stream PCM from the server. False means unreachable: fall back to Pocket."""
+        """Stream PCM from the server. False (unreachable, an error, no audio) falls back to Pocket."""
         body = {"input": text, "stream": True, "response_format": "pcm",
-                "model": cfg.get("http_model"), "voice": cfg.get("http_voice")}
+                "model": cfg.get("http_model"), "voice": cfg.get("http_voice"), **cfg.get("http_extra", {})}
         req = urllib.request.Request(
             cfg["http_url"], data=json.dumps({k: v for k, v in body.items() if v}).encode(),
             headers={"Content-Type": "application/json"},
         )
         try:
-            resp = urllib.request.urlopen(req, timeout=cfg.get("http_timeout", 10))
-        except OSError:
+            resp = urllib.request.urlopen(req, timeout=cfg.get("http_timeout", 10))  # HTTPError is an OSError
+        except OSError as e:
+            log(f"http request failed: {e}")
             return False
+        got_audio = False
         with resp:
             self.player = player = Player(cfg.get("http_sample_rate", 24000), cfg.get("volume_db", 0))
             if resp.headers.get_content_type() == "text/event-stream":
@@ -126,13 +146,15 @@ class Speaker:
                     event = json.loads(line[5:])
                     if event.get("audio"):
                         player.write_pcm(base64.b64decode(event["audio"]))
+                        got_audio = True
                     if event.get("type", "").endswith(".done"):
                         break
             else:
                 while not stop.is_set() and (data := resp.read1(8192)):
                     player.write_pcm(data)
+                    got_audio = True
             player.close()
-        return True
+        return got_audio or stop.is_set()
 
     def say_pocket(self, text, voice, stop, volume_db):
         state = self.voice(voice)

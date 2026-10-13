@@ -270,12 +270,12 @@ def send_to_daemon(req):
         return False
 
 
-def speak_pocket(text):
-    if send_to_daemon({"text": text}):
+def speak_pocket(reply):
+    if send_to_daemon({"text": reply}):
         return
     # Not running: start it with this text queued (model load takes ~10s).
     # First run installs pocket-tts (~1 GB) before the ~10s model load.
-    start_daemon(text)
+    start_daemon(reply)
 
 
 def start_daemon(text=None):
@@ -300,10 +300,15 @@ def warm():
     start_daemon()
 
 
-def speak(text):
+def max_chars():
+    return int(os.environ.get("CLAUDE_SPEAKS_MAX_CHARS", "600"))
+
+
+def speak(reply):
+    """Hand the raw reply to the daemon, which cleans it up per engine; SAPI cleans it here."""
     stop_current()
     if os.environ.get("CLAUDE_SPEAKS_ENGINE", "pocket") == "pocket":
-        speak_pocket(text)
+        speak_pocket(reply)
         return
     proc = subprocess.Popen(
         ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
@@ -312,49 +317,36 @@ def speak(text):
         start_new_session=True,
     )
     PID_FILE.write_text(str(proc.pid))
-    proc.stdin.write(text.encode("utf-8"))
+    proc.stdin.write(truncate(to_speech(reply), max_chars()).encode("utf-8"))
     proc.stdin.close()  # don't wait; let speech run after the hook exits
 
 
 def main():
     STATE_DIR.mkdir(parents=True, exist_ok=True)
-    if sys.argv[1:] == ["--stop"]:
+    args = sys.argv[1:]
+    if args == ["--stop"]:
         stop_current()
         send_to_daemon({"cmd": "stop"})
-        return
-    if sys.argv[1:] == ["--shutdown"]:
+    elif args == ["--shutdown"]:
         send_to_daemon({"cmd": "shutdown"})
-        return
-    if sys.argv[1:] == ["--stdin-text"]:  # plugin hook: the reply as plain text
-        if not MUTE_FILE.exists():
-            text = truncate(to_speech(sys.stdin.read()), int(os.environ.get("CLAUDE_SPEAKS_MAX_CHARS", "600")))
-            if text:
-                speak(text)
-        return
-    if sys.argv[1:] == ["--warm"]:
+    elif args == ["--warm"]:
         warm()
-        return
-    if sys.argv[1:] == ["--stdin-text"]:  # plugin hook: the reply as plain text
-        if not MUTE_FILE.exists():
-            text = truncate(to_speech(sys.stdin.read()), int(os.environ.get("CLAUDE_SPEAKS_MAX_CHARS", "600")))
-            if text:
-                speak(text)
-        return
-    if len(sys.argv) > 1:  # direct use: speak.py "some text"
-        speak(to_speech(" ".join(sys.argv[1:])))
-        return
-    if MUTE_FILE.exists():
-        return
-    try:
-        data = json.load(sys.stdin)
-    except json.JSONDecodeError:
-        return
-    if data.get("stop_hook_active"):
-        return
-    reply = data.get("last_assistant_message") or last_reply_from_transcript(data.get("transcript_path", ""))
-    text = truncate(to_speech(reply or ""), int(os.environ.get("CLAUDE_SPEAKS_MAX_CHARS", "600")))
-    if text:
-        speak(text)
+    elif args == ["--stdin-text"]:  # plugin hook: the reply as plain text
+        reply = sys.stdin.read()
+        if not MUTE_FILE.exists() and reply.strip():
+            speak(reply)
+    elif args:  # direct use: speak.py "some text"
+        speak(" ".join(args))
+    elif not MUTE_FILE.exists():  # classic Stop hook: JSON on stdin
+        try:
+            data = json.load(sys.stdin)
+        except json.JSONDecodeError:
+            return
+        if data.get("stop_hook_active"):
+            return
+        reply = data.get("last_assistant_message") or last_reply_from_transcript(data.get("transcript_path", ""))
+        if reply and reply.strip():
+            speak(reply)
 
 
 if __name__ == "__main__":
