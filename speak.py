@@ -93,6 +93,56 @@ def speak_path(m):
     return " " + re.sub(r"\s+", " ", out).strip() + " "
 
 
+ONES = "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen".split()
+TENS = "_ _ twenty thirty forty fifty sixty seventy eighty ninety".split()
+SCALES = [(10**12, "trillion"), (10**9, "billion"), (10**6, "million"), (1000, "thousand"), (100, "hundred")]
+UNITS = {"GB": "gigabytes", "GiB": "gigabytes", "MB": "megabytes", "MiB": "megabytes", "KB": "kilobytes",
+         "TB": "terabytes", "ms": "milliseconds", "s": "seconds", "GHz": "gigahertz", "MHz": "megahertz",
+         "Hz": "hertz", "kHz": "kilohertz", "dB": "decibels", "%": "percent"}
+UNIT_RE = r"%|[KMGT]i?B|ms|s|[kMG]?Hz|dB"
+NUMBER = re.compile(
+    r"(?<![\w.])(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?"
+    rf"(?:\s?([×x])(?!\w)|\s?({UNIT_RE})(?!\w)|(?![\w.]*[A-Za-z_]))"  # skip ids like sm_120, 4B
+)
+VERSION = re.compile(r"(?<![\w.])(v?)(\d+(?:\.\d+){2,}|(?<=v)\d+\.\d+)(?![\d.]*\d)")
+
+
+def int_words(n):
+    if n < 20:
+        return ONES[n]
+    if n < 100:
+        return TENS[n // 10] + ("" if n % 10 == 0 else " " + ONES[n % 10])
+    for value, name in SCALES:
+        if n >= value:
+            rest = n % value
+            return f"{int_words(n // value)} {name}" + (f" {int_words(rest)}" if rest else "")
+
+
+def say_whole(digits):
+    n = int(digits.replace(",", ""))
+    # Four-digit model numbers and years read in pairs: 5060 -> fifty sixty, 2026 -> twenty twenty six
+    if len(digits) == 4 and n % 1000 >= 10 and n % 100 != 0:
+        low = n % 100
+        return f"{int_words(n // 100)} {'oh ' if low < 10 else ''}{int_words(low)}"
+    return int_words(n)
+
+
+def speak_version(m):
+    return ("v " if m.group(1) else "") + " point ".join(int_words(int(p)) for p in m.group(2).split("."))
+
+
+def speak_number(m):
+    whole, frac, times, unit = m.groups()
+    words = say_whole(whole)
+    if frac:
+        words += " point " + " ".join(ONES[int(d)] for d in frac)
+    if times:
+        words += " times"
+    elif unit:
+        words += " " + UNITS[unit]
+    return words
+
+
 def to_speech(md):
     text = re.sub(r"```.*?(```|$)", "\nCode block omitted.\n", md, flags=re.S)
     text = "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("|"))  # tables
@@ -103,6 +153,10 @@ def to_speech(md):
     text = HEX_HASH.sub(speak_hash, text)
     text = re.sub(r"\$HOME\b", "home", text)
     text = re.sub(r"~(?=\d)", "about ", text)
+    text = re.sub(r"(?<=\d)\s?[–—-]\s?(?=\d)", " to ", text)  # ranges: 9–12
+    text = VERSION.sub(speak_version, text)
+    text = re.sub(r"(?<![\w.-])-(?=\d)", "minus ", text)
+    text = NUMBER.sub(speak_number, text)
     text = re.sub(r"`([^`]*)`", r"\1", text)
     text = re.sub(r"^\s{0,3}#{1,6}\s*", "", text, flags=re.M)  # headings
     text = re.sub(r"^\s*([-*+]|\d+\.)\s+", "", text, flags=re.M)  # list markers
