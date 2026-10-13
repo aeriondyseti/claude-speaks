@@ -1,6 +1,6 @@
 {
   "name": "speaks",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "Reads Claude's replies aloud with Pocket TTS (local CPU), cleaning up paths, numbers and jargon for speech.",
   "author": {
     "name": "AerionDyseti"
