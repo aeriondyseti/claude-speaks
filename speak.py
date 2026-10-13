@@ -114,7 +114,13 @@ PATH = re.compile(
 
 
 def spell(chars):
-    return " ".join(LETTERS.get(c.lower(), c) for c in chars)
+    """Letter by letter, digits included: a hash's 0 is "oh"."""
+    return " ".join(LETTERS.get(c.lower()) or digits_oh(c) for c in chars)
+
+
+def digits_oh(number):
+    """A number read as a label, not a quantity (version parts, hash and path digits): 0 is "oh"."""
+    return "oh" if number.isdigit() and int(number) == 0 else int_words(int(number)) if number.isdigit() else number
 
 
 def parse_replacements(lines):
@@ -179,15 +185,17 @@ def speak_path(m, hashes=True):
         path = HEX_HASH.sub(lambda h: f"\0{speak_hash(h)}\0", path)  # protect from separator words
     parts = re.split(r"(\0[^\0]*\0)", path)
     out = "".join(
-        part.strip("\0") if part.startswith("\0") else re.sub(r"[/._-]", lambda c: SEPARATORS[c.group()], part)
+        part.strip("\0") if part.startswith("\0")
+        # a number between separators is a label (speaks/0.3.2/): its 0 is "oh"
+        else re.sub(r"[/._-]", lambda c: SEPARATORS[c.group()], re.sub(r"(?<![^/._-])\d+(?![^/._-])", lambda d: digits_oh(d[0]), part))
         for part in parts
     )
     return " " + re.sub(r"\s+", " ", out).strip() + " "
 
 
-# "oh", not "zero": v0.3 is "vee oh dot three". A decimal says "zero" and "point": 0.05 is
-# "zero point zero five". Versions say "dot".
-ONES = "oh one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen".split()
+# A quantity says "zero" (0 errors, 0.05 is "zero point zero five"); a label says "oh" (digits_oh:
+# v0.3 is "vee oh dot three", hashes, version folders). Only a decimal says "point".
+ONES = "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen".split()
 TENS = "_ _ twenty thirty forty fifty sixty seventy eighty ninety".split()
 SCALES = [(10**12, "trillion"), (10**9, "billion"), (10**6, "million"), (1000, "thousand"), (100, "hundred")]
 UNITS = {"GB": "gigabytes", "GiB": "gigabytes", "MB": "megabytes", "MiB": "megabytes", "KB": "kilobytes",
@@ -264,7 +272,7 @@ def say_whole(digits):
 
 
 def speak_version(m):
-    return ("vee " if m.group(1) else "") + " dot ".join(int_words(int(p)) for p in m.group(2).split("."))
+    return ("vee " if m.group(1) else "") + " dot ".join(digits_oh(p) for p in m.group(2).split("."))
 
 
 # A clock time (other number:number pairs are ratios, a default replacement): 9:05, 14:00, 7:30 pm
@@ -288,9 +296,8 @@ def speak_time(m):
 def speak_number(m):
     whole, frac, times, unit = m.groups()
     words = say_whole(whole)
-    if frac:  # a decimal says "zero" (0.5, 2.05); everything else says "oh"
-        digit = lambda d: "zero" if d == "0" else ONES[int(d)]  # noqa: E731
-        words = ("zero" if whole == "0" else words) + " point " + " ".join(digit(d) for d in frac)
+    if frac:
+        words += " point " + " ".join(ONES[int(d)] for d in frac)
     if times:
         words += " times"
     elif unit:

@@ -203,7 +203,7 @@ def test_long_first_sentence_without_clauses_stays_whole():
     ("See src/app.py:10:4 now.", "See src slash app dot py, line ten now."),
     ("Meet at 10:30 or 9:05 or 14:00.", "Meet at ten thirty or nine oh five or fourteen hundred."),
     ("At 7:00 pm, then 11:15am, or 10:00.", "At seven pee em, then eleven fifteen eigh em, or ten o'clock."),
-    ("A 3:1 ratio, 16:9 screens, 25:00 is no time.", "A three to one ratio, sixteen to nine screens, twenty five to oh is no time."),
+    ("A 3:1 ratio, 16:9 screens, 25:00 is no time.", "A three to one ratio, sixteen to nine screens, twenty five to zero is no time."),
     ("Run make.Then test.", "Run make. Then test."),
     ("Use Node.js and 3.14 and `java.lang.String`.", "Use Node dot js and three point one four and java dot lang dot String."),
     ("id 123e4567-e89b-12d3-a456-426614174000 ok", "id hash ending with four oh oh oh ok."),
@@ -284,9 +284,11 @@ def test_daemon_speaker_keeps_its_methods():
 
 @pytest.mark.parametrize("md,spoken", [
     ("Pi is 3.14 and 2.0 and 1.05.", "Pi is three point one four and two point zero and one point zero five."),
-    ("It took 0.5s with 0 errors.", "It took zero point five seconds with oh errors."),
+    ("It took 0.5s with 0 errors.", "It took zero point five seconds with zero errors."),
     ("Released v2.0 as 0.1.5.2 and v1.10.0.", "Released vee two dot oh as oh dot one dot five dot two and vee one dot ten dot oh."),
     ("Room 101 at 10:05.", "Room one hundred one at ten oh five."),
+    ("0 tests, 10 runs, 100%.", "zero tests, ten runs, one hundred percent."),
+    ("Open ~/cache/speaks/0.3.0/ now.", "Open home slash cache slash speaks slash oh dot three dot oh slash now."),
     ("0.05 GB, 10.0x, -0.5 dB", "zero point zero five gigabytes, ten point zero times, minus zero point five decibels."),
 ])
 def test_oh_and_point_vs_dot(md, spoken):
