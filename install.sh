@@ -3,7 +3,7 @@
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 settings="$HOME/.claude/settings.json"
-cmd="python3 $here/speak.py"
+cmd="uv run --no-project --quiet $here/speak.py"
 
 cp "$settings" "$settings.bak.claude-speaks"
 jq --arg cmd "$cmd" '

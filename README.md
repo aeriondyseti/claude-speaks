@@ -17,15 +17,15 @@ Code blocks and tables are skipped, links are read by their label, and long repl
 ## Install
 
 Requirements:
-- Linux or WSL2 with PulseAudio `paplay` (WSLg provides it)
-- `python3`
-- [`uv`](https://docs.astral.sh/uv/)
+- [`uv`](https://docs.astral.sh/uv/), the only Python requirement: everything runs through `uv run`
+- Linux, WSL2 or macOS (on Windows, use WSL2)
+- Audio out: `paplay` (PulseAudio or PipeWire; WSLg provides it), or [sounddevice](https://python-sounddevice.readthedocs.io/), whose macOS wheel bundles PortAudio (on Linux it needs `libportaudio2`). `audio_backend` picks between them; `auto` prefers `paplay`.
 
 Then run:
 
     /plugin install speaks --marketplace aeriondyseti/aeriondyseti-plugins
 
-On the first session start, the plugin installs Pocket TTS with CPU-only PyTorch (~1 GB, into `~/.local/share/claude-speaks/venv`) in the background, then preloads the model. After that, each session's warm-up takes a few seconds.
+At each session start, the plugin starts a small background daemon. On the very first start, `uv run` installs Pocket TTS with CPU-only PyTorch (~1 GB, into `~/.local/share/claude-speaks/venv`); a toast says so if a reply arrives while that's still running. Pocket TTS itself loads only for the first reply that needs it, with a "Loading Pocket TTS" toast (about 5 s). Replies spoken by a TTS server never load it.
 
 ## Use
 
@@ -41,6 +41,7 @@ As a plugin, everything is a plugin option, set when you install it or later in 
 | `pocket_voice` | `eponine` | Pocket voice: `eponine`, `azelma`, `eve`, `jane`, `vera`, `jean`, `marius`, … (`alba` is male) |
 | `volume_db` | `6` | Gain through a soft limiter |
 | `max_chars` | `600` | Characters spoken per reply (0 means no limit) |
+| `audio_backend` | `auto` | `paplay`, `sounddevice`, or `auto` (`paplay` if installed) |
 | `replacements` | the light rules | `find => replace`, one per entry, applied first under every profile. A plain word matches whole words (any case when written in lowercase); `/regex/` is a pattern. Defaults: `Ti => tee eye`, `~/` and `$HOME` → home, `~` before a number → about, `9–12` → 9 to 12, and dropping empty `()`. Add your own, e.g. `kubectl => cube control`. |
 | `http_url` | empty | An OpenAI-style `/v1/audio/speech` endpoint. Empty means Pocket only. |
 | `http_api_key` | empty | Sent as `Authorization: Bearer <key>`. A sensitive option, kept in secure storage; or `${ENV_VAR}` |
@@ -66,7 +67,7 @@ Use `http_url` `http://127.0.0.1:8880/v1/audio/speech`, `http_model` `kokoro`, `
 
 ## Without the plugin
 
-`uv sync && ./install.sh` registers `speak.py` as a classic `Stop` hook in `~/.claude/settings.json` instead.
+`./install.sh` registers `speak.py` as a classic `Stop` hook in `~/.claude/settings.json` instead.
 
 ## GPU server: Voxtral 4B (optional)
 

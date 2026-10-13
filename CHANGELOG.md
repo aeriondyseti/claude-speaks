@@ -21,8 +21,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A light `kokoro` text profile for servers like Kokoro-FastAPI, which keeps only what
   Kokoro's own pronunciation gets wrong.
 
+- `audio_backend`: play through `paplay` or the cross-platform sounddevice (PortAudio), so
+  macOS works; `auto` prefers `paplay`.
+- Toasts while Pocket TTS installs (first run) and loads.
+
 ### Changed
 
+- Pocket TTS loads on the first reply that needs it, not at session start; the session-start
+  warm-up only starts the (now light) daemon, and `uv run` installs dependencies on first use.
+- `uv` is the only Python requirement: the plugin, CLI and classic hook run `speak.py` with
+  `uv run --no-project`.
 - A failed server request (an HTTP error or no audio, not only unreachable) falls back
   to Pocket TTS. `daemon.log` records which engine spoke.
 - The daemon cleans up each reply per engine. Its socket and state directory are
@@ -30,6 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The daemon socket works under deeply nested state directories (AF_UNIX's ~108-character
+  limit); playback errors are logged instead of swallowed.
 - `stop()` no longer adds a sentence-end pause; ALL_CAPS parts of identifiers are read as words.
 
 ## [0.1.0] - 2026-10-13

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Speaks text sent over a unix socket.
 
 Uses an OpenAI-compatible /v1/audio/speech server when one is configured and
@@ -17,6 +16,7 @@ Protocol: one JSON object per connection.
   {"cmd": "shutdown"}               exit
 """
 import argparse
+import shutil
 import base64
 import json
 import os
@@ -32,7 +32,6 @@ from pathlib import Path
 warnings.filterwarnings("ignore")
 
 import numpy as np  # noqa: E402
-from pocket_tts import TTSModel  # noqa: E402
 
 from speak import DEFAULT_REPLACEMENTS, ENV_REF, max_chars, to_speech, truncate  # noqa: E402
 
@@ -95,21 +94,39 @@ def request_headers(cfg):
     return headers
 
 
-class Player:
-    """paplay fed mono s16le, with optional gain through a tanh soft limiter."""
+def audio_backend(choice="auto"):
+    """paplay where it exists (PulseAudio/PipeWire, WSLg: the known-good path on Linux), else
+    sounddevice, whose macOS and Windows wheels bundle PortAudio (Linux needs libportaudio2)."""
+    if choice == "auto":
+        return "paplay" if shutil.which("paplay") else "sounddevice"
+    return choice
 
-    def __init__(self, rate, volume_db=0):
+
+class Player:
+    """Mono s16le out through paplay or sounddevice, with optional gain through a tanh soft limiter."""
+
+    def __init__(self, rate, volume_db=0, backend="auto"):
         self.gain = 10 ** (volume_db / 20)
         self.leftover = b""
-        self.proc = subprocess.Popen(
-            ["paplay", "--raw", "--format=s16le", "--channels=1", f"--rate={rate}"],
-            stdin=subprocess.PIPE, stderr=subprocess.DEVNULL,
-        )
+        self.proc = self.stream = None
+        if audio_backend(backend) == "paplay":
+            self.proc = subprocess.Popen(
+                ["paplay", "--raw", "--format=s16le", "--channels=1", f"--rate={rate}"],
+                stdin=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            )
+        else:
+            import sounddevice  # raises OSError when PortAudio is missing
+            self.stream = sounddevice.RawOutputStream(samplerate=rate, channels=1, dtype="int16")
+            self.stream.start()
 
     def write_float(self, samples):
         if self.gain != 1:
             samples = np.tanh(samples * self.gain)
-        self.proc.stdin.write((np.clip(samples, -1, 1) * 32767).astype("<i2").tobytes())
+        data = (np.clip(samples, -1, 1) * 32767).astype("<i2").tobytes()
+        if self.proc:
+            self.proc.stdin.write(data)
+        elif self.stream:
+            self.stream.write(data)  # blocks while PortAudio's buffer is full
 
     def write_pcm(self, data):
         data = self.leftover + data
@@ -118,21 +135,64 @@ class Player:
         self.write_float(np.frombuffer(data[:cut], "<i2").astype(np.float32) / 32768)
 
     def close(self):
-        self.proc.stdin.close()
+        """Finish playing what was written (paplay drains on its own after EOF)."""
+        if self.proc:
+            self.proc.stdin.close()
+        elif self.stream:
+            try:
+                self.stream.stop()  # waits for the buffered audio
+                self.stream.close()
+            except Exception:
+                pass
 
     def kill(self):
-        if self.proc.poll() is None:
+        if self.proc and self.proc.poll() is None:
             self.proc.kill()
+        elif self.stream:
+            try:
+                self.stream.abort()
+            except Exception:
+                pass
+
+
+class Reporter:
+    """Status lines back to the speak.py that asked ("loading-pocket", "pocket-ready"); closed once
+    an engine has started, so the client doesn't wait out the speech."""
+
+    def __init__(self, conn=None):
+        self.conn = conn
+
+    def event(self, name):
+        if self.conn:
+            try:
+                self.conn.sendall(name.encode() + b"\n")
+            except OSError:
+                self.close()
+
+    def close(self):
+        if self.conn:
+            self.conn.close()
+            self.conn = None
 
 
 class Speaker:
     def __init__(self):
-        self.model = TTSModel.load_model()
+        self.model = None  # Pocket TTS loads on the first reply that needs it
+        self.model_lock = threading.Lock()
         self.voices = {}
         self.lock = threading.Lock()
         self.stop_event = threading.Event()
         self.player = None
-        self.voice(DEFAULT_VOICE)
+
+    def ensure_pocket(self, report):
+        with self.model_lock:
+            if self.model is None:
+                report.event("loading-pocket")
+                log("loading Pocket TTS")
+                from pocket_tts import TTSModel
+                self.model = TTSModel.load_model()
+                report.event("pocket-ready")
+                log("Pocket TTS ready")
 
     def voice(self, name):
         if name not in self.voices:
@@ -144,7 +204,14 @@ class Speaker:
         if self.player:
             self.player.kill()
 
-    def say(self, reply, voice=None, options=None, env=None):
+    def say(self, reply, voice=None, options=None, env=None, report=None):
+        report = report or Reporter()
+        try:
+            self._say(reply, voice, options, env, report)
+        finally:
+            report.close()
+
+    def _say(self, reply, voice, options, env, report):
         self.stop()
         with self.lock:  # wait for the previous job to unwind
             self.stop_event = stop = threading.Event()
@@ -157,17 +224,22 @@ class Speaker:
                     cfg = {k: expand_env(v, env or {}, k) if k.startswith("http_") else v for k, v in cfg.items()}
                 if cfg.get("http_url"):
                     text = truncate(to_speech(reply, cfg.get("http_text_profile", "kokoro"), rules), limit)
-                    if not text or self.say_http(cfg, text, stop):
+                    if not text or self.say_http(cfg, text, stop, report):
                         log(f"spoke via {url_as_written}")
                         return
                     log("http engine failed; falling back to Pocket")
                 text = truncate(to_speech(reply, "pocket", rules), limit)
                 if text:
-                    self.say_pocket(text, voice or cfg.get("pocket_voice") or DEFAULT_VOICE, stop, float(cfg.get("volume_db", 0)))
-            except (BrokenPipeError, OSError):
-                pass
+                    self.ensure_pocket(report)
+                    report.close()
+                    self.say_pocket(text, voice or cfg.get("pocket_voice") or DEFAULT_VOICE, stop,
+                                    float(cfg.get("volume_db", 0)), cfg.get("audio_backend", "auto"))
+            except BrokenPipeError:
+                pass  # playback was cut off by stop()
+            except OSError as e:
+                log(f"playback failed: {e}")
 
-    def say_http(self, cfg, text, stop):
+    def say_http(self, cfg, text, stop, report):
         """Stream PCM from the server. False (unreachable, an error, no audio) falls back to Pocket."""
         body = {"input": text, "stream": True, "response_format": "pcm",
                 "model": cfg.get("http_model"), "voice": cfg.get("http_voice"), **extra_body(cfg)}
@@ -181,8 +253,10 @@ class Speaker:
             log(f"http request failed: {e}")
             return False
         got_audio = False
+        report.close()  # the server answered; nothing to report
         with resp:
-            self.player = player = Player(int(cfg.get("http_sample_rate", 24000)), float(cfg.get("volume_db", 0)))
+            self.player = player = Player(int(cfg.get("http_sample_rate", 24000)), float(cfg.get("volume_db", 0)),
+                                          cfg.get("audio_backend", "auto"))
             if resp.headers.get_content_type() == "text/event-stream":
                 # vLLM-Omni: speech.audio.delta events with base64 PCM, then speech.audio.done
                 # (the connection stays open for a while after done, so stop there).
@@ -202,9 +276,9 @@ class Speaker:
             player.close()
         return got_audio or stop.is_set()
 
-    def say_pocket(self, text, voice, stop, volume_db):
+    def say_pocket(self, text, voice, stop, volume_db, backend):
         state = self.voice(voice)
-        self.player = player = Player(self.model.sample_rate, volume_db)
+        self.player = player = Player(self.model.sample_rate, volume_db, backend)
         for chunk in self.model.generate_audio_stream(state, text, stop=stop):
             if stop.is_set():
                 break
@@ -218,7 +292,8 @@ def serve(initial_text=None):
     SOCKET.unlink(missing_ok=True)
     srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     STATE_DIR.chmod(0o700)
-    srv.bind(str(SOCKET))
+    os.chdir(STATE_DIR)
+    srv.bind(SOCKET.name)  # relative: AF_UNIX paths max out near 108 characters
     SOCKET.chmod(0o600)  # requests can carry an API key
     srv.listen()
     (STATE_DIR / "daemon.starting").unlink(missing_ok=True)
@@ -227,24 +302,27 @@ def serve(initial_text=None):
     try:
         while True:
             conn, _ = srv.accept()
-            with conn:
-                try:
-                    req = json.loads(conn.makefile().read() or "{}")
-                except json.JSONDecodeError:
-                    continue
+            try:
+                req = json.loads(conn.makefile().read() or "{}")  # the client shuts its side when done
+            except (OSError, json.JSONDecodeError):
+                conn.close()
+                continue
             cmd = req.get("cmd")
+            if cmd or not req.get("text"):
+                conn.close()
             if cmd == "shutdown":
                 speaker.stop()
                 break
             if cmd == "stop":
                 speaker.stop()
             elif req.get("text"):
-                threading.Thread(target=speaker.say, args=(req["text"], req.get("voice"), req.get("options"), req.get("env")), daemon=True).start()
+                args = (req["text"], req.get("voice"), req.get("options"), req.get("env"), Reporter(conn))
+                threading.Thread(target=speaker.say, args=args, daemon=True).start()
     finally:
         SOCKET.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--say", help="text to speak once the model is loaded")
+    ap.add_argument("--say", help="text to speak once started")
     serve(ap.parse_args().say)

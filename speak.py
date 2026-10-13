@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --no-project --quiet
 """Claude Code Stop hook: read Claude's last reply aloud (WSL).
 
 Engines: "pocket" (default) sends text to daemon.py, which keeps a Pocket TTS
@@ -35,6 +35,11 @@ PS1 = HERE / "say.ps1"
 # Kept outside the plugin folder so plugin updates don't throw away the ~1 GB install.
 VENV = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "claude-speaks/venv"
 UV_ENV = {**os.environ, "UV_PROJECT_ENVIRONMENT": str(VENV)}
+
+
+def installed():
+    """True once uv has finished installing (it creates the venv folder before that)."""
+    return any(VENV.glob("lib/python*/site-packages/pocket_tts"))
 # Kept outside the plugin folder so plugin updates don't throw away the ~1 GB install.
 VENV = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "claude-speaks/venv"
 
@@ -296,14 +301,24 @@ def stop_current():
 
 
 def send_to_daemon(req):
-    try:
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+    """Send one request; for speech, relay the daemon's status lines to stdout (the plugin
+    toasts "loading-pocket") until it closes the connection."""
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+        try:
             s.settimeout(2)
-            s.connect(str(SOCKET))
+            s.connect(SOCKET.name)  # relative to STATE_DIR (main() moves there): AF_UNIX paths max out near 108
             s.sendall(json.dumps(req).encode("utf-8"))
+            s.shutdown(socket.SHUT_WR)
+        except OSError:
+            return False
+        try:  # sent: from here on a failure only means we stop relaying
+            s.settimeout(180)  # a first Pocket load can take a while
+            with s.makefile() as events:
+                for line in events:
+                    print(line.strip(), flush=True)
+        except OSError:
+            pass
         return True
-    except OSError:
-        return False
 
 
 # ${VAR} / ${VAR:-default} in settings, as in Claude Code's .mcp.json. Expanded by the daemon at
@@ -336,8 +351,11 @@ def speak_pocket(reply):
         return
     # Not running (the session-start warm-up normally has it up): start it and wait, then send.
     # The plugin doesn't wait on this process, and the request never touches disk or argv.
+    installing = not installed()
+    if installing:
+        print("installing-pocket", flush=True)
     start_daemon()
-    deadline = time.time() + 45
+    deadline = time.time() + (900 if installing else 45)
     while time.time() < deadline:
         time.sleep(0.5)
         if send_to_daemon(request):
@@ -345,8 +363,10 @@ def speak_pocket(reply):
 
 
 def start_daemon(text=None):
-    if STARTING.exists() and time.time() - STARTING.stat().st_mtime < 60:
-        return  # already loading
+    """`uv run` installs the dependencies itself on first use (~1 GB), so that start can take minutes."""
+    window = 60 if installed() else 900
+    if STARTING.exists() and time.time() - STARTING.stat().st_mtime < window:
+        return  # already starting
     STARTING.touch()
     subprocess.Popen(
         ["uv", "run", "--quiet", "--frozen", "--project", str(HERE), "python", str(HERE / "daemon.py")]
@@ -357,13 +377,10 @@ def start_daemon(text=None):
 
 
 def warm():
-    """Session start: install pocket-tts if needed (~1 GB, first run only), then preload the model."""
-    if send_to_daemon({"cmd": "ping"}):
-        return
-    with open(STATE_DIR / "install.log", "ab") as log:
-        subprocess.run(["uv", "sync", "--quiet", "--frozen", "--project", str(HERE)],
-                       env=UV_ENV, stdout=log, stderr=log, check=True)
-    start_daemon()
+    """Session start: have the daemon up (installing on first use) before the first reply.
+    Pocket TTS itself loads only when a reply needs it."""
+    if not send_to_daemon({"cmd": "ping"}):
+        start_daemon()
 
 
 def max_chars():
@@ -389,6 +406,7 @@ def speak(reply):
 
 def main():
     STATE_DIR.mkdir(parents=True, exist_ok=True)
+    os.chdir(STATE_DIR)  # the daemon's socket is addressed relative to here
     args = sys.argv[1:]
     if args == ["--stop"]:
         stop_current()

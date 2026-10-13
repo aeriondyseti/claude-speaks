@@ -1,6 +1,25 @@
-import type { Register } from 'claude-code'
+import type { EngineInterface, ProcessSpawnChunk, Register } from 'claude-code'
 
 const ACTIONS = ['on', 'off', 'stop', 'status'] as const
+
+// speak.py runs under uv (the one requirement); it needs nothing beyond the standard library.
+const speakPy = (root: string, ...args: string[]) => ['uv', 'run', '--no-project', '--quiet', `${root}/speak.py`, ...args]
+
+const STATUS: Record<string, { text: string; timeoutMs: number }> = {
+  'installing-pocket': { text: 'Installing Pocket TTS (first run, ~1 GB). Please wait…', timeoutMs: 60_000 },
+  'loading-pocket': { text: 'Loading Pocket TTS. Please wait…', timeoutMs: 20_000 },
+  'pocket-ready': { text: 'Pocket TTS ready', timeoutMs: 2_000 },
+}
+
+async function relay($: EngineInterface, stream: AsyncIterable<ProcessSpawnChunk>) {
+  for await (const chunk of stream) {
+    if (chunk.stream !== 'stdout') continue
+    for (const line of chunk.text.split('\n')) {
+      const status = STATUS[line.trim()]
+      if (status) $.ui.toast(status.text, { timeoutMs: status.timeoutMs })
+    }
+  }
+}
 
 export const register: Register = (on, options) => {
   // speak.py hands these to the daemon, where they override ~/.config/claude-speaks/config.json.
@@ -13,21 +32,19 @@ export const register: Register = (on, options) => {
       argumentHint: ACTIONS.join('|'),
       immediate: true,
     })
-    // Install pocket-tts on first use and preload the model now, not while a reply waits.
+    // Start the daemon now (uv installs its dependencies on first use), not while a reply waits.
     $.process
-      .run(['python3', `${$.plugin.root}/speak.py`, '--warm'], { timeoutMs: 600_000 })
+      .run(speakPy($.plugin.root, '--warm'), { timeoutMs: 30_000 })
       .catch(() => {})
     return next(e)
   })
 
-  // Speak the main loop's final answer. speak.py hands it to the background daemon (waiting for it
-  // to start if needed); nothing here waits on it.
+  // Speak the main loop's final answer. speak.py hands it to the background daemon and relays
+  // its status lines; this reads them in the background, so the turn never waits on speech.
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
     if (e.loop === undefined && e.reason === 'answer' && e.answer.trim()) {
-      $.process
-        .run(['python3', `${$.plugin.root}/speak.py`, '--stdin-text'], { stdin: e.answer, env, timeoutMs: 60_000 })
-        .catch(() => {})
+      relay($, $.process.spawn({ argv: speakPy($.plugin.root, '--stdin-text'), input: e.answer, env })).catch(() => {})
     }
     return result
   })

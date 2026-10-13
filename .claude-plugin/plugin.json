@@ -99,6 +99,17 @@
       "title": "Spoken length limit",
       "description": "Characters spoken per reply before '… and more on screen'. 0 means no limit.",
       "default": 600
+    },
+    "audio_backend": {
+      "type": "string",
+      "title": "Audio output",
+      "description": "auto: paplay where it exists (Linux/WSL with PulseAudio or PipeWire), otherwise sounddevice (PortAudio: bundled on macOS; on Linux install libportaudio2).",
+      "options": [
+        "auto",
+        "paplay",
+        "sounddevice"
+      ],
+      "default": "auto"
     }
   }
 }

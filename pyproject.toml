@@ -2,7 +2,11 @@
 name = "claude-speaks"
 version = "0.1.0"
 requires-python = ">=3.10,<3.15"
-dependencies = ["pocket-tts>=3.3", "torch"]
+dependencies = [
+    "pocket-tts>=3.3",
+    "sounddevice>=0.5.6",
+    "torch",
+]
 
 [[tool.uv.index]]
 name = "pytorch-cpu"

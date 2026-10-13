@@ -5,14 +5,15 @@ here="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 state="${XDG_STATE_HOME:-$HOME/.local/state}/claude-speaks"
 mkdir -p "$state"
 
-stop() { python3 "$here/speak.py" --stop; }
+py() { uv run --no-project --quiet "$here/speak.py" "$@"; }
+stop() { py --stop; }
 
 case "${1:-status}" in
   on)     rm -f "$state/muted"; echo "claude-speaks: on" ;;
   off)    touch "$state/muted"; stop; echo "claude-speaks: off" ;;
   stop)   stop ;;
-  shutdown) python3 "$here/speak.py" --shutdown ;;  # unload the Pocket TTS daemon
-  say)    shift; python3 "$here/speak.py" "$*" ;;
+  shutdown) py --shutdown ;;  # unload the Pocket TTS daemon
+  say)    shift; py "$*" ;;
   status) [[ -f $state/muted ]] && echo "claude-speaks: off" || echo "claude-speaks: on" ;;
   *)      echo "usage: claude-speaks on|off|stop|status|say <text>|shutdown" >&2; exit 1 ;;
 esac
