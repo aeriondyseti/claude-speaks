@@ -130,7 +130,7 @@ def test_plugin_defaults_match_speak_py():
     ("___Totally___ here.", "Totally here."),
     ("**a *nested* one** here.", "a nested one here."),
     ("**Bold spanning\ntwo lines** here.", "Bold spanning. two lines here."),
-    ("**Bold with * star** inside.", "Bold with star inside."),
+    ("**Bold with * star** inside.", "Bold with times star inside."),  # a spaced * between words is multiplication
     ("A **bold** and **another** on one line.", "A bold and another on one line."),
     ("Math 2 * 3 stays.", "Math two times three stays."),
     ("Before.\n\n* * *\n\nAfter.", "Before. After."),
@@ -138,13 +138,15 @@ def test_plugin_defaults_match_speak_py():
     ("Before.\n\n___\n\nAfter.", "Before. After."),
     ("Glob `*.py` and a footnote*", "Glob star dot py and a footnote."),
     ("Run `ls *.test.ts` here.", "Run ls star dot test dot ts here."),
-    ("Keep `a_b_c` and `x * y`.", "Keep a underscore bee underscore see and x y."),
-    ("x**2 + y**2", "x two + y two."),
+    ("Use `*.{js,ts}` globs.", "Use star dot {js,ts} globs."),
+    ("Keep `a_b_c` and `x * y`.", "Keep a underscore bee underscore see and x times y."),
+    ("x**2 + y**2", "x to the power of two + y to the power of two."),
+    ("x ** 2 and 2*3 and (a + b) * c", "x to the power of two and two times three and (a + b) times c."),
     ("cost = a *** b", "cost = a b."),
     ("**bold***italic*", "bold italic."),
     ("see ***** here", "see here."),
-    (">= 3 holds", ">= three holds."),
-    ("> quoted >= 3", "quoted >= three."),
+    (">= 3 holds", "greater than or equal to three holds."),
+    ("> quoted >= 3", "quoted greater than or equal to three."),
     ("A snake_case_word and _emphasis_.", "A snake underscore case underscore word and emphasis."),
 ])
 def test_markdown(md, spoken):
@@ -176,3 +178,45 @@ def test_long_first_sentence_is_sent_in_clauses():
 def test_long_first_sentence_without_clauses_stays_whole():
     first = "A" * 150 + "."
     assert split_sentences(first + " Next.") == [first, "Next."]
+
+
+# From the survey of other readers (plan section 5a/5c).
+@pytest.mark.parametrize("md,spoken", [
+    ("Saved to /tmp/out.txt.", "Saved to slash tmp slash out dot txt."),
+    ("Look in /tmp.", "Look in slash tmp."),
+    ("See ~/dev/x.", "See home slash dev slash x."),
+    ("Visit https://x.com, then go.", "Visit a link, then go."),
+    ("Docs (see https://x.com/a).", "Docs (see a link)."),
+    ("Edit the .env file and .gitignore.", "Edit the dot env file and dot gitignore."),
+    ("Check x != y now.", "Check x not equal to y now."),
+    ("Contact kevin@example.com today.", "Contact kevin at example dot com today."),
+    ("Mail first_last@example.com.", "Mail first underscore last at example dot com."),
+    ("#1 priority", "number one priority."),
+    ("Fixed in PR #45.", "Fixed in PR number forty five."),
+    ("- [x] write tests\n- [ ] ship it", "done, write tests. to do, ship it."),
+    ("Setext\n======\nbody", "Setext. body."),
+    ("Other\n------\nbody", "Other. body."),
+    ("# Title #", "Title."),
+    ("a >= 3 and b <= 4 and c == 5", "a greater than or equal to three and b less than or equal to four and c equals five."),
+    ("Call `__init__` or __dunder_method__ here.", "Call dunder init or dunder dunder underscore method here."),
+    ("See helpers.ts:42 now.", "See helpers dot ts, line forty two now."),
+    ("See src/app.py:10:4 now.", "See src slash app dot py, line ten now."),
+    ("Meet at 10:30 or 9:05 or 14:00.", "Meet at ten thirty or nine oh five or fourteen hundred."),
+    ("At 7:00 pm, then 11:15am, or 10:00.", "At seven p m, then eleven fifteen a m, or ten o'clock."),
+    ("A 3:1 ratio, 16:9 screens, 25:00 is no time.", "A three to one ratio, sixteen to nine screens, twenty five to zero is no time."),
+    ("Run make.Then test.", "Run make. Then test."),
+    ("Use Node.js and 3.14 and `java.lang.String`.", "Use Node dot js and three point one four and java dot lang dot String."),
+    ("id 123e4567-e89b-12d3-a456-426614174000 ok", "id hash ending with four zero zero zero ok."),
+    ("Costs $5 and $1,200.", "Costs five dollars and one thousand two hundred dollars."),
+])
+def test_survey(md, spoken):
+    assert to_speech(md) == spoken
+
+
+@pytest.mark.parametrize("rules,md,spoken", [
+    (["/(\\w+)@(\\w+)/ => \\2 from \\1"], "x a@b y", "x b from a y"),  # backreferences
+    (["/(?<=\\d)x(?=\\d)/ => by"], "4x4", "four by four."),  # padded only where it would glue on
+    (["/:(?=\\d)/ => , line "], "fx.py:3", "fx dot py, line three."),
+])
+def test_regex_replacements(rules, md, spoken):
+    assert to_speech(md, {"replacements": rules}).rstrip(".") == spoken.rstrip(".")

@@ -88,10 +88,11 @@ UUID = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 SEPARATORS = {"/": " slash ", ".": " dot ", "-": " dash ", "_": " underscore "}
 # Anchored paths (~/, $HOME/, /, ./, ../) or relative ones with 2+ slashes or a file extension.
 PATH = re.compile(
-    r"(?<![\w/])(?:(?:~|\$HOME|\.{1,2})?(?:/[\w.@+-]+)+/?"
-    r"|[\w@+-][\w.@+-]*(?:/[\w.@+-]+){2,}/?"
+    r"(?<![\w/])(?:(?:~|\$HOME|\.{1,2})?(?:/[\w.@+-]+)+/?(?<!\.)"
+    r"|[\w@+-][\w.@+-]*(?:/[\w.@+-]+){2,}/?(?<!\.)"
     r"|[\w@+-][\w.@+-]*(?:/[\w.@+-]+)*/[\w@+-]+\.[A-Za-z]\w*"
-    r"|(?<!\w)[\w-]{2,}(?:\.[\w-]+)*\.[A-Za-z][A-Za-z0-9]+\b)"  # bare file.ext
+    r"|(?<!\w)[\w-]{2,}(?:\.[\w-]+)*\.[A-Za-z][A-Za-z0-9]+\b"  # bare file.ext
+    r"|(?<![\w./])\.[A-Za-z][\w-]*(?:\.[A-Za-z][\w-]*)*\b)"  # dotfile: .env, .env.local
 )
 
 
@@ -119,11 +120,22 @@ def parse_replacements(lines):
 
 def apply_replacements(text, lines):
     for pattern, repl, is_regex in parse_replacements(lines):
-        # A pattern may eat the spaces around it (9–12 -> "9 to 12"), so pad; a whole word keeps its
-        # neighbours as they are, which leaves daemon.py a file name for the path rules.
-        pad = " " if is_regex and repl else ""
-        text = pattern.sub(lambda m, r=f"{pad}{repl}{pad}": r, text)
+        if is_regex:
+            text = pattern.sub(lambda m, r=repl: padded(m, m.expand(r)), text)
+        else:  # a whole word keeps its neighbours as they are: daemon.py stays a file name
+            text = pattern.sub(lambda m, r=repl: r, text)
     return text
+
+
+def padded(m, out):
+    """A regex replacement, kept apart from a neighbour it would otherwise glue onto: 9–12 ->
+    "9 to 12", but helpers.ts:42 -> "helpers.ts, line 42" (no space before the comma)."""
+    text = m.string
+    if out and out[0].isalnum() and m.start() > 0 and not text[m.start() - 1].isspace():
+        out = " " + out
+    if out and out[-1].isalnum() and m.end() < len(text) and not text[m.end()].isspace():
+        out += " "
+    return out
 
 
 def speak_identifier(m):
@@ -172,8 +184,21 @@ DEFAULT_REPLACEMENTS = [
     r"/~(?=\d)/ => about",
     r"/(?<=\d)\s?[–—-]\s?(?=\d)/ => to",
     r"/(?<=\w)\(\)/ => ",
-    r"/(?<=\d)\s*\*\s*(?=\d)/ => times",
-    r"/(?<![\w*])\*\.(?=\w)/ => star dot",
+    r"/(?<=[\w)])(?:\*\*|\s+\*\*\s+)(?=[\w(])/ => to the power of",
+    r"/(?<=[\w)])(?:\*|\s+\*\s+)(?=[\w(])/ => times",
+    r"/(?<![\w*])\*\.(?=[\w{])/ => star dot",
+    r"/(\.[A-Za-z]\w*):(\d+)(?::\d+)?\b/ => \1, line \2",
+    r"/(?<![\d:])(?!(?:[01]?\d|2[0-3]):[0-5]\d(?!\d))(\d+):(\d+)(?![\d:])/ => \1 to \2",
+    r"/(?<=\w)@(?=[\w-]+\.[A-Za-z])/ => at",
+    r"/(?<![\w&])#(?=\d)/ => number",
+    r"/\$(?=\d)([\d,]*\d(?:\.\d+)?)/ => \1 dollars",
+    ">= => greater than or equal to",
+    "<= => less than or equal to",
+    "!= => not equal to",
+    "== => equals",
+    r"/__(\w+?)__/ => dunder \1",
+    r"/(?m)^\[[xX]\]/ => done,",
+    r"/(?m)^\[ \]/ => to do,",
 ]
 # The rules that need code rather than a find-and-replace, each a setting of its own (default shown).
 TEXT_RULES = {
@@ -217,6 +242,24 @@ def speak_version(m):
     return ("vee " if m.group(1) else "") + " point ".join(int_words(int(p)) for p in m.group(2).split("."))
 
 
+# A clock time (other number:number pairs are ratios, a default replacement): 9:05, 14:00, 7:30 pm
+TIME = re.compile(r"(?<![\w:.])([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?(?:\s?([AaPp])\.?[Mm]\.?(?!\w))?(?![\w:])")
+
+
+def speak_time(m):
+    hour, minute, second, half = int(m[1]), int(m[2]), m[3], m[4]
+    words = int_words(hour)
+    if minute:
+        words += f" {'oh ' if minute < 10 else ''}{int_words(minute)}"
+    elif not half:
+        words += " hundred" if hour > 12 or len(m[1]) == 2 and hour < 10 else " o'clock"
+    if second:
+        words += f" and {int_words(int(second))} seconds"
+    if half:
+        words += f" {half.lower()} m"
+    return words
+
+
 def speak_number(m):
     whole, frac, times, unit = m.groups()
     words = say_whole(whole)
@@ -236,7 +279,8 @@ def text_rule(cfg, name):
 
 # Emphasis never starts or ends inside a word (snake_case, x**2), in runs of one to three.
 EMPHASIS = [re.compile(r"(?<![\w*])(\*{1,3}|~~)(?=[^\s*])(.+?)(?<=[^\s*])\1(?![\w*])"),
-            re.compile(r"(?<![\w_])(_{1,3})(?=[^\s_])(.+?)(?<=[^\s_])\1(?![\w_])")]
+            # not a dunder: __init__ is a name, not bold "init"
+            re.compile(r"(?<![\w_])(_{1,3})(?!(?<=(?<!_)__)[A-Za-z0-9]\w*?(?<!_)__(?![\w_]))(?=[^\s_])(.+?)(?<=[^\s_])\1(?![\w_])")]
 
 
 def outside_code(text, fn):
@@ -260,11 +304,13 @@ def strip_markup(md):
     text = re.sub(r"```.*?(```|$)", "\nCode block omitted.\n", md, flags=re.S)
     text = "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("|"))  # tables
     text = re.sub(r"^[ \t]*([-*_])(?:[ \t]*\1){2,}[ \t]*$", "", text, flags=re.M)  # rules: ---, * * *
-    text = re.sub(r"^\s{0,3}#{1,6}\s*", "", text, flags=re.M)  # headings
+    text = re.sub(r"^[ \t]*=+[ \t]*$", "", text, flags=re.M)  # setext underline (---- went with the rules)
+    text = re.sub(r"^\s{0,3}#{1,6}(?:[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*|[ \t]*)$", r"\1", text, flags=re.M)  # headings; #1 isn't one
     text = re.sub(r"^\s*([-*+]|\d+[.)])\s+", "", text, flags=re.M)  # list markers
     text = re.sub(r"^\s*>(?!=)\s?", "", text, flags=re.M)  # quotes, not >=
     text = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", text)  # links/images -> label
-    text = re.sub(r"https?://\S+", "a link", text)
+    text = re.sub(r"https?://[^\s)]*[^\s).,!?;:]", "a link", text)  # not the punctuation after it
+    text = outside_code(text, lambda t: re.sub(r"(?<=[a-z])\.(?=[A-Z][a-z])", ". ", t))  # now.Then: a sentence
     return outside_code(text, strip_emphasis)
 
 
@@ -275,9 +321,10 @@ def to_speech(md, cfg=None):
     cfg = cfg or {}
     on = lambda name: text_rule(cfg, name)  # noqa: E731
     text = strip_markup(md)
+    if on("speak_hashes"):  # before replacements, whose 9–12 rule would split it at its dashes
+        text = UUID.sub(speak_hash, text)
     text = apply_replacements(text, cfg.get("replacements", DEFAULT_REPLACEMENTS))
     if on("speak_hashes"):
-        text = UUID.sub(speak_hash, text)
         text = HEX_HASH.sub(speak_hash, text)
     if on("speak_paths"):
         text = PATH.sub(lambda m: speak_path(m, on("speak_hashes")), text)
@@ -289,6 +336,7 @@ def to_speech(md, cfg=None):
         text = re.sub(r"\b([A-Za-z])(\d+)\b", lambda m: f"{LETTERS[m[1].lower()]} {m[2]}", text)
     if on("speak_numbers"):
         text = re.sub(r"(?<![\w.-])-(?=\d)", "minus ", text)
+        text = TIME.sub(speak_time, text)
         text = NUMBER.sub(speak_number, text)
     if on("spell_abbreviations"):
         # Vowelless 2-5 letter words, and all-caps ones whose only vowel is Y (TTY, NYC)
@@ -301,7 +349,7 @@ def to_speech(md, cfg=None):
     text = text.replace("*", "")
     lines = [l.strip() for l in text.splitlines() if l.strip()]
     text = " ".join(l if l[-1] in ".!?:;," else l + "." for l in lines)  # pause between lines
-    text = re.sub(r"\s+([.,;:!?])", r"\1", text)  # padding left by speak_path
+    text = re.sub(r"\s+([.,;:!?])(?=\s|$)", r"\1", text)  # padding left by speak_path; not .env or !=
     return re.sub(r"\s+", " ", text).strip()
 
 
