@@ -76,8 +76,22 @@ PATH = re.compile(
 )
 
 
+def spell(chars):
+    return " ".join(LETTERS.get(c.lower(), c) for c in chars)
+
+
+def load_lexicon():
+    lex = dict(LEXICON)
+    path = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "claude-speaks/lexicon.json"
+    try:
+        lex.update(json.loads(path.read_text()))
+    except (OSError, json.JSONDecodeError):
+        pass
+    return lex
+
+
 def speak_hash(m):
-    return "hash ending with " + " ".join(m.group()[-4:])
+    return "hash ending with " + spell(m.group()[-4:])
 
 
 def speak_path(m):
@@ -99,6 +113,12 @@ SCALES = [(10**12, "trillion"), (10**9, "billion"), (10**6, "million"), (1000, "
 UNITS = {"GB": "gigabytes", "GiB": "gigabytes", "MB": "megabytes", "MiB": "megabytes", "KB": "kilobytes",
          "TB": "terabytes", "ms": "milliseconds", "s": "seconds", "GHz": "gigahertz", "MHz": "megahertz",
          "Hz": "hertz", "kHz": "kilohertz", "dB": "decibels", "%": "percent"}
+LETTERS = dict(zip("abcdefghijklmnopqrstuvwxyz", (
+    "ay bee see dee ee eff gee aitch eye jay kay el em en oh pee cue ar ess tee you vee "
+    "double-you ex why zee").split()))
+# Whole-word pronunciation fixes; extend with ~/.config/claude-speaks/lexicon.json ({"word": "spoken"}).
+LEXICON = {"Ti": "tee eye", "GPU": "gee pee you", "CPU": "see pee you", "VRAM": "vee ram",
+           "WSL": "double-you ess el", "TTS": "tee tee ess", "CLI": "see el eye", "UUID": "you you eye dee"}
 UNIT_RE = r"%|[KMGT]i?B|ms|s|[kMG]?Hz|dB"
 NUMBER = re.compile(
     r"(?<![\w.])(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?"
@@ -128,7 +148,7 @@ def say_whole(digits):
 
 
 def speak_version(m):
-    return ("v " if m.group(1) else "") + " point ".join(int_words(int(p)) for p in m.group(2).split("."))
+    return ("vee " if m.group(1) else "") + " point ".join(int_words(int(p)) for p in m.group(2).split("."))
 
 
 def speak_number(m):
@@ -155,8 +175,13 @@ def to_speech(md):
     text = re.sub(r"~(?=\d)", "about ", text)
     text = re.sub(r"(?<=\d)\s?[–—-]\s?(?=\d)", " to ", text)  # ranges: 9–12
     text = VERSION.sub(speak_version, text)
+    text = re.sub(r"\b([A-Za-z])(\d+)\b", lambda m: f"{LETTERS[m[1].lower()]} {m[2]}", text)  # p99, x86
     text = re.sub(r"(?<![\w.-])-(?=\d)", "minus ", text)
     text = NUMBER.sub(speak_number, text)
+    lexicon = load_lexicon()
+    if lexicon:
+        words = re.compile(r"(?<![\w-])(" + "|".join(map(re.escape, sorted(lexicon, key=len, reverse=True))) + r")(?![\w-])")
+        text = words.sub(lambda m: lexicon[m[1]], text)
     text = re.sub(r"`([^`]*)`", r"\1", text)
     text = re.sub(r"^\s{0,3}#{1,6}\s*", "", text, flags=re.M)  # headings
     text = re.sub(r"^\s*([-*+]|\d+\.)\s+", "", text, flags=re.M)  # list markers
