@@ -96,6 +96,30 @@ def load_lexicon(base=None):
     return lex
 
 
+def parse_replacements(lines):
+    rules = []
+    for line in lines:
+        find, sep, repl = line.partition("=>")
+        find, repl = find.strip(), repl.strip()
+        if not sep or not find:
+            continue
+        if len(find) > 2 and find.startswith("/") and find.endswith("/"):
+            try:
+                rules.append((re.compile(find[1:-1]), repl))
+            except re.error:
+                continue
+        else:
+            flags = re.I if find == find.lower() else 0
+            rules.append((re.compile(r"(?<![\w-])" + re.escape(find) + r"(?![\w-])", flags), repl))
+    return rules
+
+
+def apply_replacements(text, lines):
+    for pattern, repl in parse_replacements(lines):
+        text = pattern.sub(lambda m, r=repl: f" {r} " if r else "", text)  # padded; spaces collapse later
+    return text
+
+
 def speak_identifier(m):
     """snake_case -> words joined by "underscore"; vowelless bits like db/sm are spelled out."""
     parts = m.group().split("_")
@@ -145,8 +169,18 @@ LEXICON = {"Ti": "tee eye", "gpu": "gee pee you", "cpu": "see pee you", "vram": 
            # words Pocket can't sound out
            "gym": "jim", "hmm": "hum", "shh": "shush", "nth": "enth", "brr": "burr",
            "mr": "mister", "mrs": "missus", "dr": "doctor"}
-# Kokoro's own G2P handles abbreviations, file types and separators; it only needs these.
-KOKORO_LEXICON = {"Ti": "tee eye"}
+# User-editable "find => replace" rules, applied first under every profile. A plain word matches
+# whole words (any case when written in lowercase); /regex/ is a pattern. These defaults are the
+# light ("kokoro") rules that fit this form; the rest (numbers, hashes, path separators,
+# underscores) need code and stay built in.
+DEFAULT_REPLACEMENTS = [
+    "Ti => tee eye",
+    r"/(?<![\w/])(?:~|\$HOME)(?=/)/ => home",
+    r"/\$HOME\b/ => home",
+    r"/~(?=\d)/ => about",
+    r"/(?<=\d)\s?[–—-]\s?(?=\d)/ => to",
+    r"/(?<=\w)\(\)/ => ",
+]
 # Vowelless words to leave alone rather than spell (ambiguous: St = street/saint, Ms = miz/milliseconds).
 SAY_AS_WORD = {"st", "ms", "psst", "pfft"}
 UNIT_RE = r"%|[KMGT]i?B|ms|s|[kMG]?Hz|dB"
@@ -193,32 +227,34 @@ def speak_number(m):
     return words
 
 
-def to_speech(md, profile="pocket"):
-    """profile "pocket": spell everything out; "kokoro": only what Kokoro's own G2P gets wrong."""
+def to_speech(md, profile="pocket", replacements=None):
+    """profile "pocket": spell everything out; "kokoro": only what Kokoro's own G2P gets wrong.
+    `replacements` ("find => replace" lines, DEFAULT_REPLACEMENTS when None) run first under both."""
     full = profile != "kokoro"
     text = re.sub(r"```.*?(```|$)", "\nCode block omitted.\n", md, flags=re.S)
     text = "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("|"))  # tables
     text = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", text)  # links/images -> label
     text = re.sub(r"https?://\S+", "a link", text)
+    text = apply_replacements(text, DEFAULT_REPLACEMENTS if replacements is None else replacements)
     text = UUID.sub(speak_hash, text)
     text = HEX_HASH.sub(speak_hash, text)
     if full:
         text = PATH.sub(speak_path, text)
     else:
-        text = re.sub(r"(?<![\w/])(?:~|\$HOME)(?=/)", "home", text)
         # Kokoro drops dots, dashes and (after "home") slashes inside paths
         text = PATH.sub(lambda m: " " + re.sub(r"[./-]", lambda c: {".": " dot ", "/": " slash ", "-": " dash "}[c[0]], m[0]) + " ", text)
-    text = re.sub(r"\$HOME\b", "home", text)
+    if full:  # the light profile takes these from the (editable) replacements
+        text = re.sub(r"\$HOME\b", "home", text)
+        text = re.sub(r"(?<=\w)\(\)", "", text)  # stop() -> stop; a bare ")" reads as a sentence end
+        text = re.sub(r"~(?=\d)", "about ", text)
+        text = re.sub(r"(?<=\d)\s?[–—-]\s?(?=\d)", " to ", text)  # ranges: 9–12
     text = re.sub(r"\b[A-Za-z0-9]+(?:_[A-Za-z0-9]+)+\b", speak_identifier, text)
-    text = re.sub(r"(?<=\w)\(\)", "", text)  # stop() -> stop; a bare ")" reads as a sentence end
-    text = re.sub(r"~(?=\d)", "about ", text)
-    text = re.sub(r"(?<=\d)\s?[–—-]\s?(?=\d)", " to ", text)  # ranges: 9–12
     text = VERSION.sub(speak_version, text)
     if full:
         text = re.sub(r"\b([A-Za-z])(\d+)\b", lambda m: f"{LETTERS[m[1].lower()]} {m[2]}", text)  # p99, x86
     text = re.sub(r"(?<![\w.-])-(?=\d)", "minus ", text)
     text = NUMBER.sub(speak_number, text)
-    lexicon = load_lexicon(LEXICON if full else KOKORO_LEXICON)
+    lexicon = load_lexicon(LEXICON if full else {})
     folded = {k: v for k, v in lexicon.items() if k == k.lower()}
     for keys, flags, look in ((lexicon.keys() - folded.keys(), 0, lexicon), (folded.keys(), re.I, folded)):
         if keys:
@@ -270,12 +306,26 @@ def send_to_daemon(req):
         return False
 
 
+def plugin_options():
+    """The plugin's userConfig values, handed over by the hook in CLAUDE_SPEAKS_OPTIONS."""
+    try:
+        return json.loads(os.environ.get("CLAUDE_SPEAKS_OPTIONS", "{}"))
+    except json.JSONDecodeError:
+        return {}
+
+
 def speak_pocket(reply):
-    if send_to_daemon({"text": reply}):
+    request = {"text": reply, "options": plugin_options()}
+    if send_to_daemon(request):
         return
-    # Not running: start it with this text queued (model load takes ~10s).
-    # First run installs pocket-tts (~1 GB) before the ~10s model load.
-    start_daemon(reply)
+    # Not running (the session-start warm-up normally has it up): start it and wait, then send.
+    # The plugin doesn't wait on this process, and the request never touches disk or argv.
+    start_daemon()
+    deadline = time.time() + 45
+    while time.time() < deadline:
+        time.sleep(0.5)
+        if send_to_daemon(request):
+            return
 
 
 def start_daemon(text=None):

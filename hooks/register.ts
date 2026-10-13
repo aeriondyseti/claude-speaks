@@ -2,7 +2,10 @@ import type { Register } from 'claude-code'
 
 const ACTIONS = ['on', 'off', 'stop', 'status'] as const
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  // speak.py hands these to the daemon, where they override ~/.config/claude-speaks/config.json.
+  const env = { CLAUDE_SPEAKS_OPTIONS: JSON.stringify(options) }
+
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'speaks',
@@ -17,12 +20,13 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // Speak the main loop's final answer; speak.py hands it to a background daemon and exits at once.
+  // Speak the main loop's final answer. speak.py hands it to the background daemon (waiting for it
+  // to start if needed); nothing here waits on it.
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
     if (e.loop === undefined && e.reason === 'answer' && e.answer.trim()) {
       $.process
-        .run(['python3', `${$.plugin.root}/speak.py`, '--stdin-text'], { stdin: e.answer, timeoutMs: 10_000 })
+        .run(['python3', `${$.plugin.root}/speak.py`, '--stdin-text'], { stdin: e.answer, env, timeoutMs: 60_000 })
         .catch(() => {})
     }
     return result

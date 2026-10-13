@@ -32,28 +32,35 @@ On the first session start, the plugin installs Pocket TTS with CPU-only PyTorch
 - **Plugin:** `/speaks on|off|stop|status`.
 - **Shell:** `bin/claude-speaks on|off|stop|status|say <text>|shutdown`.
 
-`~/.config/claude-speaks/config.json` is re-read on every reply, so changes take effect immediately (see `config.example.json`):
-- **`pocket_voice`:** `eponine`, `azelma`, `eve`, `jane`, `vera`, `jean`, `marius` and others. Despite the name, `alba` (the default) is a male voice.
-- **`volume_db`:** gain applied through a soft limiter. 6 is a good start.
-- **`max_chars`:** the cutoff for long replies (default 600; 0 means no limit).
+### Settings
+
+As a plugin, everything is a plugin option, set when you install it or later in `/config`. Plugin options override `~/.config/claude-speaks/config.json`, which uses the same keys (see `config.example.json`) and is the place to set them when you run without the plugin. The config is re-read on every reply, so changes apply immediately.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `pocket_voice` | `eponine` | Pocket voice: `eponine`, `azelma`, `eve`, `jane`, `vera`, `jean`, `marius`, … (`alba` is male) |
+| `volume_db` | `6` | Gain through a soft limiter |
+| `max_chars` | `600` | Characters spoken per reply (0 means no limit) |
+| `replacements` | the light rules | `find => replace`, one per entry, applied first under every profile. A plain word matches whole words (any case when written in lowercase); `/regex/` is a pattern. Defaults: `Ti => tee eye`, `~/` and `$HOME` → home, `~` before a number → about, `9–12` → 9 to 12, and dropping empty `()`. Add your own, e.g. `kubectl => cube control`. |
+| `http_url` | empty | An OpenAI-style `/v1/audio/speech` endpoint. Empty means Pocket only. |
+| `http_api_key` | empty | Sent as `Authorization: Bearer <key>`. A sensitive option, kept in secure storage. |
+| `http_headers` | empty | Extra headers, `Name: value` each |
+| `http_model`, `http_voice` | empty | The request's `model` and `voice` |
+| `http_sample_rate`, `http_timeout` | `24000`, `10` | The PCM rate in Hz, and the seconds to wait before falling back |
+| `http_extra` | empty | JSON merged into the request body |
+| `http_text_profile` | `kokoro` | `kokoro` keeps only what Kokoro's pronunciation gets wrong; `pocket` spells everything out |
+
+The rules that need code rather than a find-and-replace are built in: numbers, units and versions as words, hashes as "hash ending with …", and dots, dashes, slashes and underscores read inside paths and names. Under the `pocket` profile, `~/.config/claude-speaks/lexicon.json` (`{"word": "spoken"}`) still adds whole-word fixes.
 
 ### Using a TTS server
 
-Set `http_url` to any OpenAI-style `/v1/audio/speech` endpoint, and speech goes there. It accepts raw PCM or vLLM-Omni's SSE stream. If `http_url` isn't set, or a request fails (unreachable, an HTTP error, or no audio), that reply falls back to Pocket TTS. `~/.local/state/claude-speaks/daemon.log` records which engine spoke.
-
-| Key | Meaning |
-|---|---|
-| `http_url`, `http_model`, `http_voice`, `http_sample_rate` | Where to send speech, and with what model, voice and sample rate |
-| `http_text_profile` | The text rules the server gets. `kokoro` (the default) keeps only what Kokoro's own pronunciation gets wrong, such as hashes, `~`, numbers, units and the separators in paths. `pocket` spells everything out. |
-| `http_extra` | Merged into the request body, e.g. `{"normalization_options": {"normalize": false}}` so Kokoro-FastAPI doesn't rewrite the text a second time |
+With `http_url` set, speech goes to the server, which can return raw PCM or vLLM-Omni's SSE stream. A request that fails (unreachable, an HTTP error, or no audio) falls back to Pocket TTS for that reply. `~/.local/state/claude-speaks/daemon.log` records which engine spoke.
 
 [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI) works as-is:
 
     docker run --gpus all -p 127.0.0.1:8880:8880 ghcr.io/remsky/kokoro-fastapi-gpu:latest   # use :latest-cu128 on RTX 50-series
 
-`config.example.json` holds matching settings, using the `af_heart` voice.
-
-`~/.config/claude-speaks/lexicon.json` maps whole words to how they should be spoken, e.g. `{"kubectl": "cube control"}`. Your entries are merged over the built-ins. Lowercase keys match any case; other keys match exactly.
+Use `http_url` `http://127.0.0.1:8880/v1/audio/speech`, `http_model` `kokoro`, `http_voice` `af_heart`, and `http_extra` `{"normalization_options": {"normalize": false}}`, so the server doesn't rewrite the text a second time.
 
 ## Without the plugin
 

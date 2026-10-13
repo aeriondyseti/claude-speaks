@@ -34,7 +34,7 @@ warnings.filterwarnings("ignore")
 import numpy as np  # noqa: E402
 from pocket_tts import TTSModel  # noqa: E402
 
-from speak import max_chars, to_speech, truncate  # noqa: E402
+from speak import DEFAULT_REPLACEMENTS, max_chars, to_speech, truncate  # noqa: E402
 
 STATE_DIR = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "claude-speaks"
 SOCKET = STATE_DIR / "daemon.sock"
@@ -46,11 +46,36 @@ def log(msg):
     print(time.strftime("%H:%M:%S"), msg, file=sys.stderr, flush=True)  # stderr is daemon.log
 
 
-def load_config():
+def load_config(options=None):
+    """config.json, overridden by the plugin's options (an empty string there means unset)."""
     try:
-        return json.loads(CONFIG.read_text())
+        cfg = json.loads(CONFIG.read_text())
     except (OSError, json.JSONDecodeError):
-        return {}
+        cfg = {}
+    cfg.update({k: v for k, v in (options or {}).items() if v != ""})
+    return cfg
+
+
+def extra_body(cfg):
+    extra = cfg.get("http_extra") or {}
+    if isinstance(extra, str):  # the plugin option is a JSON string
+        try:
+            extra = json.loads(extra)
+        except json.JSONDecodeError:
+            log("http_extra is not valid JSON; ignoring it")
+            return {}
+    return extra if isinstance(extra, dict) else {}
+
+
+def request_headers(cfg):
+    headers = {"Content-Type": "application/json"}
+    if cfg.get("http_api_key"):
+        headers["Authorization"] = f"Bearer {cfg['http_api_key']}"
+    for line in cfg.get("http_headers") or []:  # "Name: value"
+        name, sep, value = line.partition(":")
+        if sep and name.strip():
+            headers[name.strip()] = value.strip()
+    return headers
 
 
 class Player:
@@ -102,41 +127,42 @@ class Speaker:
         if self.player:
             self.player.kill()
 
-    def say(self, reply, voice=None):
+    def say(self, reply, voice=None, options=None):
         self.stop()
         with self.lock:  # wait for the previous job to unwind
             self.stop_event = stop = threading.Event()
-            cfg = load_config()
-            limit = cfg.get("max_chars", max_chars())
+            cfg = load_config(options)
+            limit = int(cfg.get("max_chars", max_chars()))
+            rules = cfg.get("replacements", DEFAULT_REPLACEMENTS)
             try:
                 if cfg.get("http_url"):
-                    text = truncate(to_speech(reply, cfg.get("http_text_profile", "kokoro")), limit)
+                    text = truncate(to_speech(reply, cfg.get("http_text_profile", "kokoro"), rules), limit)
                     if not text or self.say_http(cfg, text, stop):
                         log(f"spoke via {cfg['http_url']}")
                         return
                     log("http engine failed; falling back to Pocket")
-                text = truncate(to_speech(reply, "pocket"), limit)
+                text = truncate(to_speech(reply, "pocket", rules), limit)
                 if text:
-                    self.say_pocket(text, voice or cfg.get("pocket_voice") or DEFAULT_VOICE, stop, cfg.get("volume_db", 0))
+                    self.say_pocket(text, voice or cfg.get("pocket_voice") or DEFAULT_VOICE, stop, float(cfg.get("volume_db", 0)))
             except (BrokenPipeError, OSError):
                 pass
 
     def say_http(self, cfg, text, stop):
         """Stream PCM from the server. False (unreachable, an error, no audio) falls back to Pocket."""
         body = {"input": text, "stream": True, "response_format": "pcm",
-                "model": cfg.get("http_model"), "voice": cfg.get("http_voice"), **cfg.get("http_extra", {})}
+                "model": cfg.get("http_model"), "voice": cfg.get("http_voice"), **extra_body(cfg)}
         req = urllib.request.Request(
             cfg["http_url"], data=json.dumps({k: v for k, v in body.items() if v}).encode(),
-            headers={"Content-Type": "application/json"},
+            headers=request_headers(cfg),
         )
         try:
-            resp = urllib.request.urlopen(req, timeout=cfg.get("http_timeout", 10))  # HTTPError is an OSError
+            resp = urllib.request.urlopen(req, timeout=float(cfg.get("http_timeout", 10)))  # HTTPError is an OSError
         except OSError as e:
             log(f"http request failed: {e}")
             return False
         got_audio = False
         with resp:
-            self.player = player = Player(cfg.get("http_sample_rate", 24000), cfg.get("volume_db", 0))
+            self.player = player = Player(int(cfg.get("http_sample_rate", 24000)), float(cfg.get("volume_db", 0)))
             if resp.headers.get_content_type() == "text/event-stream":
                 # vLLM-Omni: speech.audio.delta events with base64 PCM, then speech.audio.done
                 # (the connection stays open for a while after done, so stop there).
@@ -171,7 +197,9 @@ def serve(initial_text=None):
     speaker = Speaker()
     SOCKET.unlink(missing_ok=True)
     srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    STATE_DIR.chmod(0o700)
     srv.bind(str(SOCKET))
+    SOCKET.chmod(0o600)  # requests can carry an API key
     srv.listen()
     (STATE_DIR / "daemon.starting").unlink(missing_ok=True)
     if initial_text:
@@ -191,7 +219,7 @@ def serve(initial_text=None):
             if cmd == "stop":
                 speaker.stop()
             elif req.get("text"):
-                threading.Thread(target=speaker.say, args=(req["text"], req.get("voice")), daemon=True).start()
+                threading.Thread(target=speaker.say, args=(req["text"], req.get("voice"), req.get("options")), daemon=True).start()
     finally:
         SOCKET.unlink(missing_ok=True)
 

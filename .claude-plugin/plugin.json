@@ -1,8 +1,104 @@
 {
   "name": "speaks",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Reads Claude's replies aloud with Pocket TTS (local CPU), cleaning up paths, numbers and jargon for speech.",
-  "author": { "name": "AerionDyseti" },
+  "author": {
+    "name": "AerionDyseti"
+  },
   "repository": "https://github.com/aeriondyseti/claude-speaks",
-  "license": "MIT"
+  "license": "MIT",
+  "userConfig": {
+    "http_url": {
+      "type": "string",
+      "title": "TTS server URL",
+      "description": "An OpenAI-style /v1/audio/speech endpoint, e.g. http://127.0.0.1:8880/v1/audio/speech for Kokoro-FastAPI. Empty: Pocket TTS only. Pocket also speaks whenever a request fails.",
+      "default": ""
+    },
+    "http_api_key": {
+      "type": "string",
+      "title": "TTS server API key",
+      "description": "Sent as 'Authorization: Bearer <key>'. Leave empty for a local server.",
+      "sensitive": true,
+      "default": ""
+    },
+    "http_headers": {
+      "type": "string",
+      "title": "Extra request headers",
+      "description": "One 'Name: value' per entry, e.g. 'X-Api-Key: …'.",
+      "default": [],
+      "multiple": true
+    },
+    "http_model": {
+      "type": "string",
+      "title": "Model",
+      "description": "The request's model field, e.g. kokoro or tts-1.",
+      "default": ""
+    },
+    "http_voice": {
+      "type": "string",
+      "title": "Voice",
+      "description": "The request's voice field, e.g. af_heart.",
+      "default": ""
+    },
+    "http_sample_rate": {
+      "type": "number",
+      "title": "Sample rate",
+      "description": "Sample rate of the server's pcm output, in Hz.",
+      "default": 24000
+    },
+    "http_timeout": {
+      "type": "number",
+      "title": "Request timeout",
+      "description": "Seconds to wait for the server before falling back to Pocket TTS.",
+      "default": 10
+    },
+    "http_extra": {
+      "type": "string",
+      "title": "Extra request fields",
+      "description": "JSON merged into the request body, e.g. {\"speed\": 1.1, \"normalization_options\": {\"normalize\": false}} for Kokoro-FastAPI.",
+      "default": ""
+    },
+    "http_text_profile": {
+      "type": "string",
+      "title": "Text rules for the server",
+      "description": "kokoro: only what Kokoro's pronunciation gets wrong. pocket: spell everything out.",
+      "options": [
+        "kokoro",
+        "pocket"
+      ],
+      "default": "kokoro"
+    },
+    "replacements": {
+      "type": "string",
+      "title": "Replacements",
+      "description": "Rules applied first, one 'find => replace' per entry. A plain word matches whole words (any case if written lowercase); /regex/ is a pattern. Pre-filled with the light rules; add your own, e.g. 'kubectl => cube control'.",
+      "default": [
+        "Ti => tee eye",
+        "/(?<![\\w/])(?:~|\\$HOME)(?=/)/ => home",
+        "/\\$HOME\\b/ => home",
+        "/~(?=\\d)/ => about",
+        "/(?<=\\d)\\s?[–—-]\\s?(?=\\d)/ => to",
+        "/(?<=\\w)\\(\\)/ => "
+      ],
+      "multiple": true
+    },
+    "pocket_voice": {
+      "type": "string",
+      "title": "Pocket TTS voice",
+      "description": "Built-in Pocket voice: eponine, azelma, eve, jane, vera, jean, marius, … (alba is male).",
+      "default": "eponine"
+    },
+    "volume_db": {
+      "type": "number",
+      "title": "Volume boost (dB)",
+      "description": "Gain through a soft limiter. 0 is unchanged; 6 is a good start.",
+      "default": 6
+    },
+    "max_chars": {
+      "type": "number",
+      "title": "Spoken length limit",
+      "description": "Characters spoken per reply before '… and more on screen'. 0 means no limit.",
+      "default": 600
+    }
+  }
 }
