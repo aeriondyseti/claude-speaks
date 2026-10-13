@@ -141,8 +141,8 @@ def test_plugin_defaults_match_speak_py():
     ("Use `*.{js,ts}` globs.", "Use star dot {js,ts} globs."),
     ("Keep `a_b_c` and `x * y`.", "Keep a underscore bee underscore see and x times y."),
     ("x**2 + y**2", "x to the power of two + y to the power of two."),
-    ("x ** 2 and 2*3 and (a + b) * c", "x to the power of two and two times three and (a + b) times c."),
-    ("cost = a *** b", "cost = a b."),
+    ("x ** 2 and 2*3 and (a + b) * c", "x to the power of two and two times three and (ey + b) times c."),
+    ("cost = a *** b", "cost = ey b."),
     ("**bold***italic*", "bold italic."),
     ("see ***** here", "see here."),
     (">= 3 holds", "greater than or equal to three holds."),
@@ -197,7 +197,7 @@ def test_long_first_sentence_without_clauses_stays_whole():
     ("Setext\n======\nbody", "Setext. body."),
     ("Other\n------\nbody", "Other. body."),
     ("# Title #", "Title."),
-    ("a >= 3 and b <= 4 and c == 5", "a greater than or equal to three and b less than or equal to four and c equals five."),
+    ("a >= 3 and b <= 4 and c == 5", "ey greater than or equal to three and b less than or equal to four and c equals five."),
     ("Call `__init__` or __dunder_method__ here.", "Call dunder init or dunder dunder underscore method here."),
     ("See helpers.ts:42 now.", "See helpers dot ts, line forty two now."),
     ("See src/app.py:10:4 now.", "See src slash app dot py, line ten now."),
@@ -231,8 +231,8 @@ def test_regex_replacements(rules, md, spoken):
     ("Use <kbd>Ctrl</kbd>+<kbd>C</kbd> to stop.", "Use Ctrl+C to stop."),
     ("Line one<br>Line two", "Line one. Line two."),
     ("<details><summary>More</summary>Hidden text</details>", "More. Hidden text."),
-    ("Keep Vec<String> and a < b and `<path>` here.", "Keep Vec<String> and a < b and <path> here."),
-    ("AT&amp;T and a &lt; b", "AT&T and a < b."),
+    ("Keep Vec<String> and a < b and `<path>` here.", "Keep Vec<String> and ey < b and <path> here."),
+    ("AT&amp;T and a &lt; b", "AT&T and ey < b."),
     ("\x1b[31mError\x1b[0m happened", "Error happened."),
     ("Done ✅ 🎉 all good ⚠️ and 👍🏽 too", "Done all good and too."),
     ("It was 25°C.", "It was twenty five°C."),  # ° is a symbol worth keeping
@@ -240,4 +240,15 @@ def test_regex_replacements(rules, md, spoken):
     ("Footnote[^1] here.\n\n[^1]: The note.", "Footnote here. The note."),
 ])
 def test_markup(md, spoken):
+    assert to_speech(md) == spoken
+
+
+@pytest.mark.parametrize("md,spoken", [
+    ("If a >= b then x + a.", "If ey greater than or equal to b then x + ey."),
+    ("Use `a` and `b`, or a*b and a ** 2.", "Use ey and b, or ey times b and ey to the power of two."),
+    ("A + B and a != b and x = a.", "ey + B and ey not equal to b and x = ey."),
+    ("A long sentence with a few words, a lot.", "A long sentence with a few words, a lot."),
+    ("Wow! a thing (a note) - a dash, 50% a day.", "Wow! a thing (a note) - a dash, fifty percent ey day."),
+])
+def test_letter_a(md, spoken):
     assert to_speech(md) == spoken

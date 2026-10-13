@@ -132,10 +132,13 @@ def apply_replacements(text, lines):
 def padded(m, out):
     """A regex replacement, kept apart from a neighbour it would otherwise glue onto: 9–12 ->
     "9 to 12", but helpers.ts:42 -> "helpers.ts, line 42" (no space before the comma)."""
-    text = m.string
-    if out and out[0].isalnum() and m.start() > 0 and not text[m.start() - 1].isspace():
+    text, found = m.string, m[0]
+    # A space where the match ate one, or where the neighbour would run on; not "( ey" or "ey *b".
+    before = m.start() > 0 and (found[:1].isspace() or text[m.start() - 1].isalnum() or text[m.start() - 1] in "/_)]}")
+    after = m.end() < len(text) and (found[-1:].isspace() or text[m.end()].isalnum() or text[m.end()] in "/_([{")
+    if out and out[0].isalnum() and before:
         out = " " + out
-    if out and out[-1].isalnum() and m.end() < len(text) and not text[m.end()].isspace():
+    if out and out[-1].isalnum() and after:
         out += " "
     return out
 
@@ -181,6 +184,8 @@ LETTERS = dict(zip("abcdefghijklmnopqrstuvwxyz", (
 # never in code; these defaults are the light set that suits Kokoro.
 DEFAULT_REPLACEMENTS = [
     "Ti => tee eye",
+    # The letter a, not the article: alone in `code`, or beside a math operator (a >= b, x + a)
+    r"/(?<![\w'])(?:(?<=`)[aA](?=`)|[aA](?=\s?(?:[<>=+*%^]|!=))|(?:(?<=[<>=+*%^])|(?<=[<>=+*%^]\s))[aA])(?![\w'])/ => ey",
     r"/(?<![\w/])(?:~|\$HOME)(?=/)/ => home",
     r"/\$HOME\b/ => home",
     r"/~(?=\d)/ => about",

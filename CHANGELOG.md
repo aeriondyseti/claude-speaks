@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-13
+
+### Added
+
+- The letter `a` is read as "ey" (not the article) when it's alone in inline code or beside a math
+  operator: `a >= b`, `x + a`, `a*b`. A default replacement, so add it to your own list if you keep
+  one.
+
+### Fixed
+
+- Regex replacements no longer add a space after an opening bracket or before an operator
+  ("( ey + b)", "ey *b"), and keep the space a match ate (`(a + b) * c` -> "... times c").
+
 ## [0.5.0] - 2026-10-13
 
 ### Added
@@ -149,7 +162,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional OpenAI-compatible HTTP engine (raw PCM or vLLM-Omni SSE) with Pocket fallback,
   and a Voxtral 4B compose file for a GPU server.
 
-[Unreleased]: https://github.com/aeriondyseti/claude-speaks/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/aeriondyseti/claude-speaks/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/aeriondyseti/claude-speaks/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/aeriondyseti/claude-speaks/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/aeriondyseti/claude-speaks/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/aeriondyseti/claude-speaks/compare/v0.3.1...v0.3.2

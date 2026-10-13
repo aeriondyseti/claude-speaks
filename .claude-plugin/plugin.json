@@ -1,6 +1,6 @@
 {
   "name": "speaks",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Reads Claude's replies aloud with Pocket TTS (local CPU), cleaning up paths, numbers and jargon for speech.",
   "author": {
     "name": "AerionDyseti"
@@ -64,6 +64,7 @@
       "description": "Every word-level fix, applied first and the same for every engine; one 'find => replace' per entry. A plain word matches whole words (any case if written lowercase); /regex/ is a pattern. Pre-filled with light rules that suit Kokoro; add your own, e.g. 'kubectl => cube control' or 'py => pie'.",
       "default": [
         "Ti => tee eye",
+        "/(?<![\\w'])(?:(?<=`)[aA](?=`)|[aA](?=\\s?(?:[<>=+*%^]|!=))|(?:(?<=[<>=+*%^])|(?<=[<>=+*%^]\\s))[aA])(?![\\w'])/ => ey",
         "/(?<![\\w/])(?:~|\\$HOME)(?=/)/ => home",
         "/\\$HOME\\b/ => home",
         "/~(?=\\d)/ => about",
