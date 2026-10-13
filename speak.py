@@ -157,7 +157,7 @@ def padded(m, out):
     "9 to 12", but helpers.ts:42 -> "helpers.ts, line 42" (no space before the comma)."""
     text, found = m.string, m[0]
     # A space where the match ate one, or where the neighbour would run on; not "( ey" or "ey *b".
-    before = m.start() > 0 and (found[:1].isspace() or text[m.start() - 1].isalnum() or text[m.start() - 1] in "/_)]}")
+    before = m.start() > 0 and (found[:1].isspace() or text[m.start() - 1].isalnum() or text[m.start() - 1] in "/_)]},;")
     after = m.end() < len(text) and (found[-1:].isspace() or text[m.end()].isalnum() or text[m.end()] in "/_([{")
     if out and out[0].isalnum() and before:
         out = " " + out
@@ -229,6 +229,14 @@ DEFAULT_REPLACEMENTS = [
     "JUSTFILE => justfile",
     "VAGRANTFILE => vagrantfile",
     "STYLEGUIDE => style guide",
+    "C# => see sharp",
+    "F# => eff sharp",
+    "Ctrl => control",
+    "Cmd => command",
+    "w/o => without",
+    "w/ => with",
+    r"/→/ => to",
+    r"/(?<=\s)->(?=\s)/ => to",  # spaced only: p->x is C
     # Dice: 22d6, d20, 4d6kh3, 2d8-1 (a minus, not the 9–12 range rule below). At most three
     # digits a side, so a short hash like 86441d4 isn't a roll.
     r"/(?<![\w.])(\d{0,3})[dD](\d{1,3})kh(\d{1,3})(?![\w%]|\.\w)/ => \1 dee \2 keep highest \3",
@@ -243,21 +251,28 @@ DEFAULT_REPLACEMENTS = [
     r"/(?<![\w'])(?:(?<=`)[aA](?=`)|[aA](?=\s?(?:[<>=+*%^]|!=))|(?:(?<=[<>=+*%^])|(?<=[<>=+*%^]\s))[aA])(?![\w'])/ => eigh",
     r"/(?<![\w/])(?:~|\$HOME)(?=/)/ => home",
     r"/\$HOME\b/ => home",
-    r"/~(?=\d)/ => about",
+    r"/~(?=\$?\d)/ => about",
     r"/(?<=\d)\s?[–—-]\s?(?=\d)/ => to",
     r"/(?<=\w)\(\)/ => ",
-    r"/(?<=[\w)])(?:\*\*|\s+\*\*\s+)(?=[\w(])/ => to the power of",
+    r"/(?<=[\w)])(?:\*\*|\^|\s+(?:\*\*|\^)\s+)(?=[\w(])/ => to the power of",
     r"/(?<=[\w)])(?:\*|\s+\*\s+)(?=[\w(])/ => times",
     r"/(?<![\w*])\*\.(?=[\w{])/ => star dot",
+    r"/(?<![\w.])(\d{1,3}(?:\.\d{1,3}){3}):(\d{1,5})(?![\w:.])/ => \1, port \2",
+    r"/\blocalhost:(\d{1,5})\b/ => localhost, port \1",
     r"/(\.[A-Za-z]\w*):(\d+)(?::\d+)?\b/ => \1, line \2",
-    r"/(?<![\d:])(?!(?:[01]?\d|2[0-3]):[0-5]\d(?!\d))(\d+):(\d+)(?![\d:])/ => \1 to \2",
+    r"/(?<![\d:.])(?!(?:[01]?\d|2[0-3]):[0-5]\d(?!\d))(\d+):(\d+)(?![\d:])/ => \1 to \2",
     r"/(?<=\w)@(?=[\w-]+\.[A-Za-z])/ => at",
     r"/(?<![\w&])#(?=\d)/ => number",
     r"/\$(?=\d)([\d,]*\d(?:\.\d+)?)/ => \1 dollars",
-    ">= => greater than or equal to",
-    "<= => less than or equal to",
-    "!= => not equal to",
-    "== => equals",
+    r"/(?<=\d)\/(?=\d)/ => slash",  # 1/2: always "one slash two" until fractions get a real rule
+    r"/>=/ => greater than or equal to",
+    r"/<=/ => less than or equal to",
+    r"/!==/ => strictly not equal to",
+    r"/!=/ => not equal to",
+    r"/===/ => strictly equals",
+    r"/==/ => equals",
+    r"/<(?=\s?\d)/ => less than",  # only before a number: Vec<String> stays
+    r"/(?<![-=])>(?=\s?\d)/ => greater than",
     r"/__(\w+?)__/ => dunder \1",
     r"/(?m)^\[[xX]\]/ => done,",
     r"/(?m)^\[ \]/ => to do,",
@@ -268,7 +283,7 @@ TEXT_RULES = {
     "speak_paths": True,          # ~/dev/a.py -> "slash dev slash a dot py"
     "speak_snake_case": True,     # debug_log_text -> "debug underscore log underscore text"
     "speak_versions": True,       # v0.3.2 -> "vee oh dot three dot two"
-    "speak_numbers": True,        # 1,234 / 8 GB / -5 dB / 2x -> words
+    "speak_numbers": True,        # 1,234 / 8 GB / -5 dB / 2x / 2026-10-13 / 10:30 -> words
     "spell_letter_digits": False, # p99, x86 -> "pee 99", "ex 86"
     "spell_abbreviations": False, # vowelless db, cfg, RTX, TTY -> "dee bee", ...
 }
@@ -320,6 +335,24 @@ def speak_time(m):
     if half:
         words += " " + spell(half + "m")  # "a m" would be read as the article
     return words
+
+
+MONTHS = "January February March April May June July August September October November December".split()
+DATE = re.compile(r"(?<![\w.-])(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])(?![\w-])")
+
+
+def ordinal(n):
+    words = int_words(n).split()
+    last = {"one": "first", "two": "second", "three": "third", "five": "fifth", "eight": "eighth",
+            "nine": "ninth", "twelve": "twelfth"}.get(words[-1])
+    if not last:
+        last = words[-1][:-1] + "ieth" if words[-1].endswith("y") else words[-1] + "th"
+    return " ".join(words[:-1] + [last])
+
+
+def speak_date(m):
+    """2026-10-13 -> "October thirteenth, twenty twenty six" """
+    return f"{MONTHS[int(m[2]) - 1]} {ordinal(int(m[3]))}, {say_whole(m[1])}"
 
 
 def speak_number(m):
@@ -426,6 +459,8 @@ def to_speech(md, cfg=None):
     text = strip_markup(md)
     if on("speak_hashes"):  # before replacements, whose 9–12 rule would split it at its dashes
         text = UUID.sub(speak_hash, text)
+    if on("speak_numbers"):  # the same for dates
+        text = DATE.sub(speak_date, text)
     text = apply_replacements(text, cfg.get("replacements", DEFAULT_REPLACEMENTS))
     if on("speak_hashes"):
         text = HEX_HASH.sub(speak_hash, text)

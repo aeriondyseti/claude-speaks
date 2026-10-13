@@ -10,6 +10,32 @@ corresponds to 0.1.5.1 in this scheme, and any four-part version is newer than a
 
 ## [Unreleased]
 
+## [0.1.9.0] - 2026-10-13
+
+### Added
+
+- ISO dates are read as dates: `2026-10-13` is "October thirteenth, twenty twenty six". Before,
+  the `9–12` range rule turned the dashes into "to".
+- Default replacements:
+  - `localhost:3000` and `127.0.0.1:8880` say "port". Before, the ratio rule said "to".
+  - `Ctrl` and `Cmd` become "control" and "command". With the spelling settings on, `Ctrl` was
+    spelled out.
+  - `C#` and `F#` become "see sharp" and "eff sharp". Kokoro dropped the `#`.
+  - `w/` and `w/o` become "with" and "without".
+  - `→` and spaced `->` become "to". `p->x` is left alone.
+  - `^` between operands is "to the power of".
+  - `1/2` is "one slash two". Kokoro dropped the slash. A real fraction rule is still to come.
+  - `===` is "strictly equals" and `!==` is "strictly not equal to".
+  - `<` and `>` before a number say "less than" and "greater than", so `Vec<String>` is left alone.
+
+### Fixed
+
+- `~$0.03` says "about".
+- Comparison operators work without spaces, as in `>=3.10` or `a===b`.
+- A regex replacement after a comma gets a space: `>=3.10,<3.15`.
+
+If you keep your own `replacements` list, copy the new default rules into it.
+
 ## [0.1.8.0] - 2026-10-13
 
 ### Added
@@ -246,7 +272,8 @@ If you keep your own `replacements` list, copy the new default rules into it.
 - Optional OpenAI-compatible HTTP engine (raw PCM or vLLM-Omni SSE) with Pocket fallback,
   and a Voxtral 4B compose file for a GPU server.
 
-[Unreleased]: https://github.com/aeriondyseti/claude-speaks/compare/v0.1.8.0...HEAD
+[Unreleased]: https://github.com/aeriondyseti/claude-speaks/compare/v0.1.9.0...HEAD
+[0.1.9.0]: https://github.com/aeriondyseti/claude-speaks/compare/v0.1.8.0...v0.1.9.0
 [0.1.8.0]: https://github.com/aeriondyseti/claude-speaks/compare/v0.1.7.0...v0.1.8.0
 [0.1.7.0]: https://github.com/aeriondyseti/claude-speaks/compare/v0.1.6.2...v0.1.7.0
 [0.1.6.2]: https://github.com/aeriondyseti/claude-speaks/compare/v0.1.6.1...v0.1.6.2

@@ -228,7 +228,7 @@ def test_regex_replacements(rules, md, spoken):
      "Before. Setting, Default. max underscore chars, six hundred. volume, six decibels. After."),
     ("| a | b |\n| - | - |\n| 1 |  |", "a, b. one."),  # empty cells skipped
     ("| x \\| y | z |", "x | y, z."),  # an escaped pipe is content
-    ("Use <kbd>Ctrl</kbd>+<kbd>C</kbd> to stop.", "Use Ctrl+C to stop."),
+    ("Use <kbd>Ctrl</kbd>+<kbd>C</kbd> to stop.", "Use control+C to stop."),
     ("Line one<br>Line two", "Line one. Line two."),
     ("<details><summary>More</summary>Hidden text</details>", "More. Hidden text."),
     ("Keep Vec<String> and a < b and `<path>` here.", "Keep Vec<String> and eigh < b and <path> here."),
@@ -332,4 +332,27 @@ def test_dice(md, spoken):
     ("IDEAS.md, ROADMAP.md and PROGRESS.md stay.", "IDEAS dot md, ROADMAP dot md and PROGRESS dot md stay."),
 ])
 def test_repo_file_names(md, spoken):
+    assert to_speech(md) == spoken
+
+
+# Gotchas found while dogfooding, 2026-10-13.
+@pytest.mark.parametrize("md,spoken", [
+    ("Released on 2026-10-13 at 14:30.", "Released on October thirteenth, twenty twenty six at fourteen thirty."),
+    ("From 2026-01-01 to 2026-12-31.", "From January first, twenty twenty six to December thirty first, twenty twenty six."),
+    ("Not a date: 2026-13-45 or 9–12.", "Not a date: twenty twenty six to thirteen to forty five or nine to twelve."),
+    ("Server at 127.0.0.1:8880 and localhost:3000.",
+     "Server at one hundred twenty seven dot oh dot oh dot one, port eighty eight eighty and localhost, port three thousand."),
+    ("Press Ctrl+C or Cmd+K.", "Press control+C or command+K."),
+    ("Cost: ~$0.03 each.", "Cost: about zero point zero three dollars each."),
+    ("Python >=3.10,<3.15 and a===b, a!==b.",
+     "Python greater than or equal to three point one zero, less than three point one five and eigh strictly equals b, eigh strictly not equal to b."),
+    ("Then 2^10 and x ^ 2.", "Then two to the power of ten and x to the power of two."),
+    ("If x == y or x === y.", "If x equals y or x strictly equals y."),
+    ("If x != y or x !== y.", "If x not equal to y or x strictly not equal to y."),
+    ("Write C# and F#.", "Write see sharp and eff sharp."),
+    ("Go w/ care, w/o fear.", "Go with care, without fear."),
+    ("Step one → step two -> done, but p->x stays.", "Step one to step two to done, but p->x stays."),
+    ("About 1/2 or 3/4 of it.", "About one slash two or three slash four of it."),
+])
+def test_gotchas(md, spoken):
     assert to_speech(md) == spoken
