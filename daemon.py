@@ -5,7 +5,8 @@ Uses an OpenAI-compatible /v1/audio/speech server when one is configured and
 reachable (e.g. a GPU container), otherwise a Pocket TTS model kept loaded here.
 Config is re-read on every request from ~/.config/claude-speaks/config.json:
   {"http_url": "http://127.0.0.1:18090/v1/audio/speech", "http_model": "...",
-   "http_voice": "casual_female", "http_sample_rate": 24000, "pocket_voice": "alba"}
+   "http_voice": "casual_female", "http_sample_rate": 24000, "pocket_voice": "alba",
+   "volume_db": 6}
 
 Protocol: one JSON object per connection.
   {"text": "...", "voice": "alba"}  speak (interrupts anything playing)
@@ -41,11 +42,34 @@ def load_config():
         return {}
 
 
-def play(rate):
-    return subprocess.Popen(
-        ["paplay", "--raw", "--format=s16le", "--channels=1", f"--rate={rate}"],
-        stdin=subprocess.PIPE, stderr=subprocess.DEVNULL,
-    )
+class Player:
+    """paplay fed mono s16le, with optional gain through a tanh soft limiter."""
+
+    def __init__(self, rate, volume_db=0):
+        self.gain = 10 ** (volume_db / 20)
+        self.leftover = b""
+        self.proc = subprocess.Popen(
+            ["paplay", "--raw", "--format=s16le", "--channels=1", f"--rate={rate}"],
+            stdin=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        )
+
+    def write_float(self, samples):
+        if self.gain != 1:
+            samples = np.tanh(samples * self.gain)
+        self.proc.stdin.write((np.clip(samples, -1, 1) * 32767).astype("<i2").tobytes())
+
+    def write_pcm(self, data):
+        data = self.leftover + data
+        cut = len(data) - len(data) % 2  # chunks may split a sample
+        self.leftover = data[cut:]
+        self.write_float(np.frombuffer(data[:cut], "<i2").astype(np.float32) / 32768)
+
+    def close(self):
+        self.proc.stdin.close()
+
+    def kill(self):
+        if self.proc.poll() is None:
+            self.proc.kill()
 
 
 class Speaker:
@@ -64,7 +88,7 @@ class Speaker:
 
     def stop(self):
         self.stop_event.set()
-        if self.player and self.player.poll() is None:
+        if self.player:
             self.player.kill()
 
     def say(self, text, voice=None):
@@ -75,7 +99,7 @@ class Speaker:
             try:
                 if cfg.get("http_url") and self.say_http(cfg, text, stop):
                     return
-                self.say_pocket(text, voice or cfg.get("pocket_voice") or DEFAULT_VOICE, stop)
+                self.say_pocket(text, voice or cfg.get("pocket_voice") or DEFAULT_VOICE, stop, cfg.get("volume_db", 0))
             except (BrokenPipeError, OSError):
                 pass
 
@@ -92,7 +116,7 @@ class Speaker:
         except OSError:
             return False
         with resp:
-            self.player = player = play(cfg.get("http_sample_rate", 24000))
+            self.player = player = Player(cfg.get("http_sample_rate", 24000), cfg.get("volume_db", 0))
             if resp.headers.get_content_type() == "text/event-stream":
                 # vLLM-Omni: speech.audio.delta events with base64 PCM, then speech.audio.done
                 # (the connection stays open for a while after done, so stop there).
@@ -101,24 +125,24 @@ class Speaker:
                         continue
                     event = json.loads(line[5:])
                     if event.get("audio"):
-                        player.stdin.write(base64.b64decode(event["audio"]))
+                        player.write_pcm(base64.b64decode(event["audio"]))
                     if event.get("type", "").endswith(".done"):
                         break
             else:
                 while not stop.is_set() and (data := resp.read1(8192)):
-                    player.stdin.write(data)
-            player.stdin.close()
+                    player.write_pcm(data)
+            player.close()
         return True
 
-    def say_pocket(self, text, voice, stop):
+    def say_pocket(self, text, voice, stop, volume_db):
         state = self.voice(voice)
-        self.player = player = play(self.model.sample_rate)
+        self.player = player = Player(self.model.sample_rate, volume_db)
         for chunk in self.model.generate_audio_stream(state, text, stop=stop):
             if stop.is_set():
                 break
-            pcm = (np.clip(chunk.detach().cpu().numpy(), -1, 1) * 32767).astype("<i2")
-            player.stdin.write(pcm.tobytes())
-        player.stdin.close()
+            player.write_float(chunk.detach().cpu().numpy())
+        player.close()
+
 
 def serve(initial_text=None):
     STATE_DIR.mkdir(parents=True, exist_ok=True)

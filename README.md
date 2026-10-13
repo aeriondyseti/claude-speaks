@@ -24,6 +24,7 @@ Reads Claude Code's replies aloud on WSL, using a Stop hook.
     claude-speaks shutdown    # unload the daemon (it restarts on the next reply)
 
 Env: `CLAUDE_SPEAKS_MAX_CHARS` (0 = no limit), `CLAUDE_SPEAKS_POCKET_VOICE` (default `alba`).
+`volume_db` in the config boosts loudness through a soft limiter (6 is a good start; 9–12 gets louder but flatter).
 Config is re-read on every reply, so you can switch servers or voices without restarting anything.
 
 ## GPU server: Voxtral 4B (manual trial)
