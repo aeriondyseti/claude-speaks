@@ -3,5 +3,6 @@
   "http_model": "mistralai/Voxtral-4B-TTS-2603",
   "http_voice": "casual_female",
   "http_sample_rate": 24000,
-  "volume_db": 6
+  "volume_db": 6,
+  "pocket_voice": "eponine"
 }

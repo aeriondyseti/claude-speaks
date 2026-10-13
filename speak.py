@@ -90,6 +90,14 @@ def load_lexicon():
     return lex
 
 
+def speak_identifier(m):
+    """snake_case -> words joined by "underscore"; vowelless bits like db/sm are spelled out."""
+    parts = m.group().split("_")
+    return " underscore ".join(
+        spell(p) if len(p) <= 4 and p.isalpha() and not re.search(r"[aeiouy]", p, re.I) else p for p in parts
+    )
+
+
 def speak_hash(m):
     return "hash ending with " + spell(m.group()[-4:])
 
@@ -172,6 +180,7 @@ def to_speech(md):
     text = UUID.sub(speak_hash, text)
     text = HEX_HASH.sub(speak_hash, text)
     text = re.sub(r"\$HOME\b", "home", text)
+    text = re.sub(r"\b[A-Za-z0-9]+(?:_[A-Za-z0-9]+)+\b", speak_identifier, text)
     text = re.sub(r"~(?=\d)", "about ", text)
     text = re.sub(r"(?<=\d)\s?[–—-]\s?(?=\d)", " to ", text)  # ranges: 9–12
     text = VERSION.sub(speak_version, text)
