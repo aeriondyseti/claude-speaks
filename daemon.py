@@ -12,11 +12,14 @@ Requests carry the raw reply; it is cleaned up and truncated here, the same for 
 Protocol: one JSON object per connection.
   {"text": "...", "voice": "alba"}  speak (interrupts anything playing)
   {"cmd": "stop"}                   stop playback
+  {"cmd": "hello"}                  -> "daemon <code fingerprint> <plugin version>"
   {"cmd": "shutdown"}               exit
+  {"cmd": "shutdown", "when_idle": true}  free the socket now, exit after the current reply
 """
 import argparse
 import queue
 import shutil
+import signal
 import base64
 import json
 import os
@@ -33,9 +36,11 @@ warnings.filterwarnings("ignore")
 
 import numpy as np  # noqa: E402
 
-from speak import ENV_REF, code_fingerprint, max_chars, split_sentences, to_speech, truncate  # noqa: E402
+from speak import (ENV_REF, RETIRING, code_fingerprint, max_chars, plugin_version,  # noqa: E402
+                   split_sentences, to_speech, truncate)
 
 FINGERPRINT = code_fingerprint(Path(__file__).resolve().parent)  # of the code this process loaded
+VERSION = plugin_version(Path(__file__).resolve().parent)
 
 STATE_DIR = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "claude-speaks"
 SOCKET = STATE_DIR / "daemon.sock"
@@ -205,6 +210,7 @@ class Speaker:
         self.stop_event.set()
         if self.player:
             self.player.kill()
+        stop_retiring()
 
     def say(self, reply, voice=None, options=None, env=None, report=None):
         report = report or Reporter()
@@ -329,6 +335,30 @@ class Speaker:
         player.close()
 
 
+def stop_retiring():
+    """A replaced daemon may still be finishing its last reply: new speech, or a stop, ends it."""
+    try:
+        pid = int(RETIRING.read_text())
+        if pid != os.getpid():
+            os.kill(pid, signal.SIGUSR1)
+    except (OSError, ValueError):
+        pass
+
+
+def retire(speaker):
+    """Replaced while idle-or-speaking: the socket is already free for the new daemon; finish the
+    reply in progress (unless the new daemon stops it), then exit."""
+    RETIRING.write_text(str(os.getpid()))
+    signal.signal(signal.SIGUSR1, lambda *_: speaker.stop())
+    try:
+        while speaker.lock.locked():
+            time.sleep(0.1)
+    finally:
+        if RETIRING.read_text() == str(os.getpid()):
+            RETIRING.unlink(missing_ok=True)
+    log("retired")
+
+
 def serve(initial_text=None):
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     speaker = Speaker()
@@ -343,6 +373,7 @@ def serve(initial_text=None):
     log(f"daemon {FINGERPRINT} ready")
     if initial_text:
         threading.Thread(target=speaker.say, args=(initial_text,), daemon=True).start()
+    retiring = False
     try:
         while True:
             conn, _ = srv.accept()
@@ -354,11 +385,18 @@ def serve(initial_text=None):
             cmd = req.get("cmd")
             if cmd == "hello":
                 try:
-                    conn.sendall(f"daemon {FINGERPRINT}\n".encode())
+                    conn.sendall(f"daemon {FINGERPRINT} {VERSION}\n".encode())
                 except OSError:
                     pass
             if cmd or not req.get("text"):
                 conn.close()
+            if cmd == "shutdown" and req.get("when_idle"):
+                log("replaced: finishing the current reply, then exiting")
+                srv.close()
+                SOCKET.unlink(missing_ok=True)  # now, so the new daemon can start
+                retiring = True  # and never again: the socket at that path will be the new daemon's
+                retire(speaker)
+                return
             if cmd == "shutdown":
                 log("shutting down")
                 speaker.stop()
@@ -369,7 +407,8 @@ def serve(initial_text=None):
                 args = (req["text"], req.get("voice"), req.get("options"), req.get("env"), Reporter(conn))
                 threading.Thread(target=speaker.say, args=args, daemon=True).start()
     finally:
-        SOCKET.unlink(missing_ok=True)
+        if not retiring:
+            SOCKET.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

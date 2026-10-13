@@ -3,9 +3,28 @@
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html), with a
+leading `0.` to mark it as pre-release, use-at-your-own-risk software: `0.MAJOR.MINOR.PATCH`. A
+breaking change goes from 0.1.5.2 to 0.2.0.0. Releases up to 0.5.2 used three parts; 0.5.2
+corresponds to 0.1.5.1 in this scheme, and any four-part version is newer than any three-part one.
 
 ## [Unreleased]
+
+## [0.1.5.2] - 2026-10-13
+
+### Fixed
+
+- Two Claude Code sessions on different plugin versions no longer cut off each other's speech.
+  A session only replaces a daemon that is older than itself; a newer one is left running and
+  serves it too. `hello` now reports the plugin version as well as the code fingerprint.
+- A daemon replaced at session start finishes the reply it's speaking before it exits. The new
+  daemon starts at once, and a new reply or `/speaks stop` still cuts the old one off, so the two
+  never talk over each other. A session with a reply waiting replaces an older daemon at once, as
+  before.
+
+### Changed
+
+- Versions are now `0.MAJOR.MINOR.PATCH` (see the top of this file).
 
 ## [0.5.2] - 2026-10-13
 
@@ -173,7 +192,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional OpenAI-compatible HTTP engine (raw PCM or vLLM-Omni SSE) with Pocket fallback,
   and a Voxtral 4B compose file for a GPU server.
 
-[Unreleased]: https://github.com/aeriondyseti/claude-speaks/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/aeriondyseti/claude-speaks/compare/v0.1.5.2...HEAD
+[0.1.5.2]: https://github.com/aeriondyseti/claude-speaks/compare/v0.5.2...v0.1.5.2
 [0.5.2]: https://github.com/aeriondyseti/claude-speaks/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/aeriondyseti/claude-speaks/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/aeriondyseti/claude-speaks/compare/v0.4.0...v0.5.0

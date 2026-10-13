@@ -96,6 +96,8 @@ The text cleanup has its own tests, which need no audio device, model or daemon:
 
     uv run --no-project --with pytest pytest
 
+The hook module's tests run with `claude plugin test .`.
+
 ## License
 
 MIT

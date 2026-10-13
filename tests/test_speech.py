@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from speak import DEFAULT_REPLACEMENTS, split_sentences, to_speech, truncate
+from speak import DEFAULT_REPLACEMENTS, split_sentences, to_speech, truncate, version_key
 
 # The two spelling settings on, as suits Pocket TTS on its own.
 POCKET = {"spell_letter_digits": True, "spell_abbreviations": True}
@@ -264,3 +264,19 @@ def test_hash_spells_a_as_eigh():
 ])
 def test_am_pm_keeps_the_sentence_end(md, spoken):
     assert to_speech(md) == spoken
+
+
+@pytest.mark.parametrize("older,newer", [
+    ("", "0.3.1"), ("0.5.1", "0.5.2"), ("0.5.2", "0.1.5.2"), ("0.1.5.2", "0.1.6.0"), ("0.1.9.9", "0.2.0.0"),
+])
+def test_version_order(older, newer):
+    assert version_key(older) < version_key(newer)
+
+
+def test_daemon_speaker_keeps_its_methods():
+    """daemon.py needs numpy to import, so read its structure instead."""
+    import ast
+    tree = ast.parse((Path(__file__).parent.parent / "daemon.py").read_text())
+    speaker = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Speaker")
+    methods = {n.name for n in speaker.body if isinstance(n, ast.FunctionDef)}
+    assert {"say", "_say", "stop", "say_http", "say_pocket", "stream_sentence"} <= methods

@@ -33,6 +33,7 @@ MUTE_FILE = STATE_DIR / "muted"
 PID_FILE = STATE_DIR / "speaker.pid"
 SOCKET = STATE_DIR / "daemon.sock"
 STARTING = STATE_DIR / "daemon.starting"
+RETIRING = STATE_DIR / "daemon.retiring"  # pid of a replaced daemon finishing its last reply
 HERE = Path(__file__).resolve().parent
 PS1 = HERE / "say.ps1"
 # Kept outside the plugin folder so plugin updates don't throw away the ~1 GB install.
@@ -47,6 +48,20 @@ def code_fingerprint(root=HERE):
     for name in ("speak.py", "daemon.py"):
         digest.update((root / name).read_bytes())
     return digest.hexdigest()[:12]
+
+
+def plugin_version(root=HERE):
+    try:
+        return json.loads((root / ".claude-plugin/plugin.json").read_text())["version"]
+    except (OSError, ValueError, KeyError):
+        return ""
+
+
+def version_key(version):
+    """Sortable plugin version. Releases up to 0.5.2 used three parts; from 0.1.5.2 on, versions
+    are 0.MAJOR.MINOR.PATCH, so any four-part version is newer than any three-part one."""
+    parts = tuple(int(n) for n in re.findall(r"\d+", version or ""))
+    return (len(parts) >= 4, parts)
 
 
 def installed():
@@ -502,24 +517,36 @@ def plugin_options():
         return {}
 
 
-def daemon_fingerprint():
-    """The running daemon's code fingerprint, "" for a daemon from before the handshake existed,
-    None when none is running."""
+def daemon_hello():
+    """(fingerprint, plugin version) of the running daemon, None when none is running. A daemon
+    from before 0.3.1 answers neither ("", ""); one from before 0.5.3, no version."""
     lines = []
     if not send_to_daemon({"cmd": "hello"}, lines.append):
         return None
-    return next((l.split(" ", 1)[1] for l in lines if l.startswith("daemon ")), "")
+    words = next((l.split()[1:] for l in lines if l.startswith("daemon ")), [])
+    return (words + ["", ""])[0], (words + ["", ""])[1]
 
 
-def ensure_daemon(wait=True):
-    """Have a daemon from this copy's code running, replacing a stale one. With wait, block until it
-    answers (minutes on the very first run, while uv installs)."""
+def daemon_fingerprint():
+    hello = daemon_hello()
+    return hello and hello[0]
+
+
+def ensure_daemon(wait=True, when_idle=False):
+    """Have a daemon from this copy's code running, replacing an older one. A newer daemon (another
+    session updated first) is left alone: it serves this client too, and replacing it would start a
+    tug-of-war that cuts speech off. With when_idle, the old daemon finishes what it's saying first;
+    without, it stops at once (a reply is waiting, and a new reply interrupts anyway). With wait,
+    block until the new one answers (minutes on the very first run, while uv installs)."""
     mine = code_fingerprint()
-    running = daemon_fingerprint()
-    if running == mine:
+    hello = daemon_hello()
+    if hello and hello[0] == mine:
         return True
-    if running is not None:  # stale: an older version, or code edited since it started
-        send_to_daemon({"cmd": "shutdown"}, lambda line: None)
+    if hello:
+        if version_key(hello[1]) > version_key(plugin_version()):
+            return True
+        # older, or the same version with other code (edited in development): replace it
+        send_to_daemon({"cmd": "shutdown", "when_idle": when_idle}, lambda line: None)
         deadline = time.time() + 5
         while SOCKET.exists() and time.time() < deadline:
             time.sleep(0.1)
@@ -570,7 +597,7 @@ def start_daemon(text=None):
 def warm():
     """Session start: have a current daemon up (installing on first use) before the first reply.
     Pocket TTS itself loads only when a reply needs it."""
-    ensure_daemon(wait=False)
+    ensure_daemon(wait=False, when_idle=True)  # don't cut off another session's reply
 
 
 def max_chars():
