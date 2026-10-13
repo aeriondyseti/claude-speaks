@@ -6,9 +6,8 @@ Config is re-read on every request from ~/.config/claude-speaks/config.json:
   {"http_url": "http://127.0.0.1:18090/v1/audio/speech", "http_model": "...",
    "http_voice": "casual_female", "http_sample_rate": 24000, "pocket_voice": "alba",
    "volume_db": 6, "max_chars": 600,
-   "http_text_profile": "kokoro",          # text rules for the server; Pocket always gets "pocket"
    "http_extra": {"normalization_options": {"normalize": false}}}  # merged into the request body
-Requests carry the raw reply; it is cleaned up and truncated here, per engine.
+Requests carry the raw reply; it is cleaned up and truncated here, the same for every engine.
 
 Protocol: one JSON object per connection.
   {"text": "...", "voice": "alba"}  speak (interrupts anything playing)
@@ -35,7 +34,7 @@ warnings.filterwarnings("ignore")
 
 import numpy as np  # noqa: E402
 
-from speak import DEFAULT_REPLACEMENTS, ENV_REF, code_fingerprint, max_chars, to_speech, truncate  # noqa: E402
+from speak import ENV_REF, code_fingerprint, max_chars, to_speech, truncate  # noqa: E402
 
 FINGERPRINT = code_fingerprint(Path(__file__).resolve().parent)  # of the code this process loaded
 
@@ -77,7 +76,16 @@ def expand_env(value, env, key):
 
 
 def split_sentences(text):
-    parts = [p.strip() for p in re.split(r"(?<=[.!?])\s+", text) if p.strip()]
+    parts = []
+    for p in re.split(r"(?<=[.!?])\s+", text):
+        # A wordless piece ("...") gets no audio from Kokoro, which reads as a failure; join it on
+        if parts and not re.search(r"\w", parts[-1]):
+            parts[-1] += " " + p
+        elif p.strip():
+            parts.append(p.strip())
+    if len(parts) > 1 and not re.search(r"\w", parts[-1]):
+        tail = parts.pop()
+        parts[-1] += " " + tail
     return parts or [text]
 
 
@@ -226,15 +234,13 @@ class Speaker:
             self.stop_event = stop = threading.Event()
             cfg = load_config(options)
             limit = int(cfg.get("max_chars", max_chars()))
-            rules = cfg.get("replacements", DEFAULT_REPLACEMENTS)
             debug = bool(cfg.get("debug_log_text"))
             try:
                 url_as_written = cfg.get("http_url")  # logged instead of the expansion, which may hold a key
                 if url_as_written:
                     cfg = {k: expand_env(v, env or {}, k) if k.startswith("http_") else v for k, v in cfg.items()}
-                pocket_text = None
+                text = pocket_text = truncate(to_speech(reply, cfg), limit)  # the same text for every engine
                 if cfg.get("http_url"):
-                    text = truncate(to_speech(reply, cfg.get("http_text_profile", "kokoro"), rules), limit)
                     if debug:
                         log(f"text for {url_as_written}: {text}")
                     spoke, rest = self.say_http(cfg, text, stop, report) if text else (True, "")
@@ -243,11 +249,9 @@ class Speaker:
                         return
                     if spoke:  # a later sentence failed: Pocket says the rest
                         log("http engine failed partway; Pocket speaks the rest")
-                        pocket_text = truncate(to_speech(rest, "pocket", rules), limit)
+                        pocket_text = rest
                     else:
                         log("http engine failed; falling back to Pocket")
-                if pocket_text is None:
-                    pocket_text = truncate(to_speech(reply, "pocket", rules), limit)
                 if pocket_text:
                     if debug:
                         log(f"text for Pocket: {pocket_text}")

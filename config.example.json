@@ -6,6 +6,5 @@
   "http_model": "kokoro",
   "http_voice": "af_heart",
   "http_sample_rate": 24000,
-  "http_text_profile": "kokoro",
   "http_extra": { "normalization_options": { "normalize": false } }
 }

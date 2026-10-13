@@ -23,13 +23,12 @@ Status: not started. `speaks` 0.2.0 runs on Linux, WSL2 and macOS. On native Win
 
 ### 2. Paths
 
-These are XDG-style everywhere: `STATE_DIR`, `VENV`, `CONFIG`, and the lexicon path in `speak.py` and `daemon.py`.
+These are XDG-style everywhere: `STATE_DIR`, `VENV`, `CONFIG` in `speak.py` and `daemon.py`.
 
 - **On Windows, default under `%LOCALAPPDATA%\claude-speaks\`:**
   - `state\` for the log, the starting marker and `daemon.json`
   - `venv\`
   - `config.json`
-  - `lexicon.json`
 - **Keep XDG overrides working when the variables are set.** One `paths()` helper should serve both files. Right now `speak.py` and `daemon.py` each define these constants.
 - **`installed()` won't find a Windows install.** It globs `lib/python*/site-packages/pocket_tts`, but a Windows venv uses `Lib/site-packages`. Check both layouts.
 

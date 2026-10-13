@@ -58,20 +58,10 @@
       "description": "JSON merged into the request body, e.g. {\"speed\": 1.1, \"normalization_options\": {\"normalize\": false}} for Kokoro-FastAPI.",
       "default": ""
     },
-    "http_text_profile": {
-      "type": "string",
-      "title": "Text rules for the server",
-      "description": "kokoro: only what Kokoro's pronunciation gets wrong. pocket: spell everything out.",
-      "options": [
-        "kokoro",
-        "pocket"
-      ],
-      "default": "kokoro"
-    },
     "replacements": {
       "type": "string",
       "title": "Replacements",
-      "description": "Rules applied first, one 'find => replace' per entry. A plain word matches whole words (any case if written lowercase); /regex/ is a pattern. Pre-filled with the light rules; add your own, e.g. 'kubectl => cube control'.",
+      "description": "Every word-level fix, applied first and the same for every engine; one 'find => replace' per entry. A plain word matches whole words (any case if written lowercase); /regex/ is a pattern. Pre-filled with light rules that suit Kokoro; add your own, e.g. 'kubectl => cube control' or 'py => pie'.",
       "default": [
         "Ti => tee eye",
         "/(?<![\\w/])(?:~|\\$HOME)(?=/)/ => home",
@@ -81,6 +71,48 @@
         "/(?<=\\w)\\(\\)/ => "
       ],
       "multiple": true
+    },
+    "speak_hashes": {
+      "type": "boolean",
+      "title": "Read hashes",
+      "description": "Commit hashes and UUIDs read as \"hash ending with\" plus their last four characters.",
+      "default": true
+    },
+    "speak_paths": {
+      "type": "boolean",
+      "title": "Read file paths",
+      "description": "Slashes, dots, dashes and underscores inside paths and file names read aloud: a/b.py -> \"a slash b dot py\".",
+      "default": true
+    },
+    "speak_snake_case": {
+      "type": "boolean",
+      "title": "Read snake_case",
+      "description": "Underscores in names read aloud: debug_log_text -> \"debug underscore log underscore text\". Vowelless parts are spelled out.",
+      "default": true
+    },
+    "speak_versions": {
+      "type": "boolean",
+      "title": "Read versions",
+      "description": "v0.3.2 -> \"vee zero point three point two\".",
+      "default": true
+    },
+    "speak_numbers": {
+      "type": "boolean",
+      "title": "Read numbers",
+      "description": "Numbers, units, multipliers and negatives as words: 8 GB, -5 dB, 2x, 1,234.",
+      "default": true
+    },
+    "spell_letter_digits": {
+      "type": "boolean",
+      "title": "Spell letter+number",
+      "description": "p99, x86 -> \"pee 99\", \"ex 86\". Useful for Pocket TTS.",
+      "default": false
+    },
+    "spell_abbreviations": {
+      "type": "boolean",
+      "title": "Spell abbreviations",
+      "description": "Vowelless words (db, cfg, RTX) and all-caps ones like TTY are spelled letter by letter. Useful for Pocket TTS; add a replacement for any you want said as a word, e.g. \"St => street\".",
+      "default": false
     },
     "pocket_voice": {
       "type": "string",

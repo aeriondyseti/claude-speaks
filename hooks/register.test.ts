@@ -23,7 +23,7 @@ describe('turn.complete', () => {
     expect(calls[0].argv.slice(-2)).toEqual([expect.stringContaining('speak.py'), '--stdin-text'])
     expect(calls[0].input).toBe(turn.answer)
     const options = JSON.parse(calls[0].env?.CLAUDE_SPEAKS_OPTIONS ?? '{}')
-    expect(options.http_text_profile).toBe('kokoro')
+    expect(options.spell_abbreviations).toBe(false)
     expect(options.replacements).toContain('Ti => tee eye')
   })
 

@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- All pronunciation comes from the config. The built-in lexicon, `lexicon.json` and the
+  `http_text_profile` setting (`kokoro`/`pocket`) are gone: every word swap is a
+  `replacements` rule, and each rule that needs code has its own setting (`speak_hashes`,
+  `speak_paths`, `speak_snake_case`, `speak_versions`, `speak_numbers`, `spell_letter_digits`,
+  `spell_abbreviations`). The defaults reproduce the old `kokoro` profile, and every engine,
+  Pocket TTS included, gets the same text. For the old Pocket behaviour, turn on the two
+  `spell_*` settings and add replacements such as `py => pie` and `json => jay sohn`.
+
+### Fixed
+
+- The "… and more on screen" ending is spoken by the TTS server, not Pocket TTS. Sentence
+  splitting made a bare "..." its own request, which Kokoro answers with no audio, so the
+  daemon fell back to Pocket for the rest. A piece with no words now joins its neighbour.
+
 ## [0.3.2] - 2026-10-13
 
 ### Fixed

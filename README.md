@@ -42,18 +42,24 @@ As a plugin, everything is a plugin option, set when you install it or later in 
 | `volume_db` | `6` | Gain through a soft limiter |
 | `max_chars` | `600` | Characters spoken per reply (0 means no limit) |
 | `audio_backend` | `auto` | `paplay`, `sounddevice`, or `auto` (`paplay` if installed) |
-| `replacements` | the light rules | `find => replace`, one per entry, applied first under every profile. A plain word matches whole words (any case when written in lowercase); `/regex/` is a pattern. Defaults: `Ti => tee eye`, `~/` and `$HOME` → home, `~` before a number → about, `9–12` → 9 to 12, and dropping empty `()`. Add your own, e.g. `kubectl => cube control`. |
+| `replacements` | the light rules | Every word-level fix: `find => replace`, one per entry, applied first and the same for every engine. A plain word matches whole words (any case when written in lowercase); `/regex/` is a pattern. Defaults: `Ti => tee eye`, `~/` and `$HOME` → home, `~` before a number → about, `9–12` → 9 to 12, and dropping empty `()`. Add your own, e.g. `kubectl => cube control`, or `py => pie` and `json => jay sohn` for Pocket TTS. |
+| `speak_hashes` | on | Commit hashes and UUIDs read as "hash ending with" plus their last four characters |
+| `speak_paths` | on | Slashes, dots, dashes and underscores read inside paths and file names: `a/b.py` → "a slash b dot py" |
+| `speak_snake_case` | on | `debug_log_text` → "debug underscore log underscore text"; vowelless parts are spelled out |
+| `speak_versions` | on | `v0.3.2` → "vee zero point three point two" |
+| `speak_numbers` | on | Numbers, units, multipliers and negatives as words: `8 GB`, `-5 dB`, `2x`, `1,234` |
+| `spell_letter_digits` | off | `p99`, `x86` → "pee 99", "ex 86" |
+| `spell_abbreviations` | off | Vowelless words (`db`, `cfg`, `RTX`) and all-caps ones like `TTY` spelled letter by letter. Add a replacement for any you want said as a word, e.g. `St => street`. |
 | `http_url` | empty | An OpenAI-style `/v1/audio/speech` endpoint. Empty means Pocket only. |
 | `http_api_key` | empty | Sent as `Authorization: Bearer <key>`. A sensitive option, kept in secure storage; or `${ENV_VAR}` |
 | `http_headers` | empty | Extra headers, `Name: value` each |
 | `http_model`, `http_voice` | empty | The request's `model` and `voice` |
 | `http_sample_rate`, `http_timeout` | `24000`, `10` | The PCM rate in Hz, and the seconds to wait before falling back |
 | `http_extra` | empty | JSON merged into the request body |
-| `http_text_profile` | `kokoro` | `kokoro` keeps only what Kokoro's pronunciation gets wrong; `pocket` spells everything out |
 | `http_split_sentences` | on | One request per sentence, fetched ahead of playback. The first audio comes after one sentence's synthesis (≈0.3 s with Kokoro-FastAPI on a GPU, against ≈3.7 s for a whole paragraph). If a later sentence fails, Pocket speaks the rest. |
 | `debug_log_text` | off | Logs the exact text each engine is given to `daemon.log`, for troubleshooting pronunciation. The log is readable only by you. |
 
-The rules that need code rather than a find-and-replace are built in: numbers, units and versions as words, hashes as "hash ending with …", and dots, dashes, slashes and underscores read inside paths and names. Under the `pocket` profile, `~/.config/claude-speaks/lexicon.json` (`{"word": "spoken"}`) still adds whole-word fixes.
+Nothing about pronunciation is hidden in code: every word swap is a replacement, and each rule that needs code is a setting above. Only Markdown cleanup is fixed (code blocks become "Code block omitted", tables are skipped, links read as their label or "a link"). The defaults suit Kokoro; for Pocket TTS on its own, turn on the two spelling settings and add replacements for the file types and jargon you hear wrong.
 
 ### Using a TTS server
 

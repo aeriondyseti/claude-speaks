@@ -99,16 +99,6 @@ def spell(chars):
     return " ".join(LETTERS.get(c.lower(), c) for c in chars)
 
 
-def load_lexicon(base=None):
-    lex = dict(LEXICON if base is None else base)
-    path = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "claude-speaks/lexicon.json"
-    try:
-        lex.update(json.loads(path.read_text()))
-    except (OSError, json.JSONDecodeError):
-        pass
-    return lex
-
-
 def parse_replacements(lines):
     rules = []
     for line in lines:
@@ -150,11 +140,11 @@ def speak_hash(m):
     return "hash ending with " + spell(m.group()[-4:])
 
 
-def speak_path(m):
+def speak_path(m, hashes=True):
     path = m.group()
-    path = re.sub(r"^(~|\$HOME)(?=/|$)", "home", path)
-    path = UUID.sub(lambda h: f"\0{speak_hash(h)}\0", path)
-    path = HEX_HASH.sub(lambda h: f"\0{speak_hash(h)}\0", path)  # protect from separator words
+    if hashes:
+        path = UUID.sub(lambda h: f"\0{speak_hash(h)}\0", path)
+        path = HEX_HASH.sub(lambda h: f"\0{speak_hash(h)}\0", path)  # protect from separator words
     parts = re.split(r"(\0[^\0]*\0)", path)
     out = "".join(
         part.strip("\0") if part.startswith("\0") else re.sub(r"[/._-]", lambda c: SEPARATORS[c.group()], part)
@@ -172,23 +162,9 @@ UNITS = {"GB": "gigabytes", "GiB": "gigabytes", "MB": "megabytes", "MiB": "megab
 LETTERS = dict(zip("abcdefghijklmnopqrstuvwxyz", (
     "ay bee see dee ee eff gee aitch eye jay kay el em en oh pee cue ar ess tee you vee "
     "double-you ex why zee").split()))
-# Whole-word pronunciation fixes; extend with ~/.config/claude-speaks/lexicon.json ({"word": "spoken"}).
-# Lowercase keys match any case (JSON, json); others match exactly.
-LEXICON = {"Ti": "tee eye", "gpu": "gee pee you", "cpu": "see pee you", "vram": "vee ram",
-           "wsl": "double-you ess el", "tts": "tee tee ess", "cli": "see el eye", "uuid": "you you eye dee",
-           # file types
-           "json": "jay sohn", "yaml": "yah-mull", "yml": "yah-mull", "png": "ping", "gif": "giff",
-           "jpg": "jay peg", "jpeg": "jay peg", "toml": "tom-ull", "py": "pie", "exe": "ex ee",
-           "wav": "wave", "md": "markdown", "ini": "in ee", "tsx": "tee ess ex", "jsx": "jay ess ex",
-           # path words
-           "src": "source", "tmp": "temp", "usr": "user", "mnt": "mount", "vs": "versus",
-           # words Pocket can't sound out
-           "gym": "jim", "hmm": "hum", "shh": "shush", "nth": "enth", "brr": "burr",
-           "mr": "mister", "mrs": "missus", "dr": "doctor"}
-# User-editable "find => replace" rules, applied first under every profile. A plain word matches
-# whole words (any case when written in lowercase); /regex/ is a pattern. These defaults are the
-# light ("kokoro") rules that fit this form; the rest (numbers, hashes, path separators,
-# underscores) need code and stay built in.
+# User-editable "find => replace" rules, applied before anything else. A plain word matches whole
+# words (any case when written in lowercase); /regex/ is a pattern. Every word-level fix lives here,
+# never in code; these defaults are the light set that suits Kokoro.
 DEFAULT_REPLACEMENTS = [
     "Ti => tee eye",
     r"/(?<![\w/])(?:~|\$HOME)(?=/)/ => home",
@@ -197,8 +173,16 @@ DEFAULT_REPLACEMENTS = [
     r"/(?<=\d)\s?[–—-]\s?(?=\d)/ => to",
     r"/(?<=\w)\(\)/ => ",
 ]
-# Vowelless words to leave alone rather than spell (ambiguous: St = street/saint, Ms = miz/milliseconds).
-SAY_AS_WORD = {"st", "ms", "psst", "pfft"}
+# The rules that need code rather than a find-and-replace, each a setting of its own (default shown).
+TEXT_RULES = {
+    "speak_hashes": True,         # 77522be1a2b3c, UUIDs -> "hash ending with two bee three see"
+    "speak_paths": True,          # ~/dev/a.py -> "slash dev slash a dot py"
+    "speak_snake_case": True,     # debug_log_text -> "debug underscore log underscore text"
+    "speak_versions": True,       # v0.3.2 -> "vee zero point three point two"
+    "speak_numbers": True,        # 1,234 / 8 GB / -5 dB / 2x -> words
+    "spell_letter_digits": False, # p99, x86 -> "pee 99", "ex 86"
+    "spell_abbreviations": False, # vowelless db, cfg, RTX, TTY -> "dee bee", ...
+}
 UNIT_RE = r"%|[KMGT]i?B|ms|s|[kMG]?Hz|dB"
 NUMBER = re.compile(
     r"(?<![\w.])(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?"
@@ -243,44 +227,40 @@ def speak_number(m):
     return words
 
 
-def to_speech(md, profile="pocket", replacements=None):
-    """profile "pocket": spell everything out; "kokoro": only what Kokoro's own G2P gets wrong.
-    `replacements` ("find => replace" lines, DEFAULT_REPLACEMENTS when None) run first under both."""
-    full = profile != "kokoro"
+def text_rule(cfg, name):
+    value = cfg.get(name, TEXT_RULES[name])
+    return value.lower() not in ("false", "0", "off", "no") if isinstance(value, str) else bool(value)
+
+
+def to_speech(md, cfg=None):
+    """Markdown -> speakable text. Everything beyond Markdown cleanup comes from cfg: its
+    `replacements` ("find => replace" lines, DEFAULT_REPLACEMENTS when unset) run first, then
+    each TEXT_RULES setting that is on."""
+    cfg = cfg or {}
+    on = lambda name: text_rule(cfg, name)  # noqa: E731
     text = re.sub(r"```.*?(```|$)", "\nCode block omitted.\n", md, flags=re.S)
     text = "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("|"))  # tables
     text = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", text)  # links/images -> label
     text = re.sub(r"https?://\S+", "a link", text)
-    text = apply_replacements(text, DEFAULT_REPLACEMENTS if replacements is None else replacements)
-    text = UUID.sub(speak_hash, text)
-    text = HEX_HASH.sub(speak_hash, text)
-    if full:
-        text = PATH.sub(speak_path, text)
-    else:
-        # Kokoro drops dots, dashes and (after "home") slashes inside paths
-        text = PATH.sub(lambda m: " " + re.sub(r"[./-]", lambda c: {".": " dot ", "/": " slash ", "-": " dash "}[c[0]], m[0]) + " ", text)
-    if full:  # the light profile takes these from the (editable) replacements
-        text = re.sub(r"\$HOME\b", "home", text)
-        text = re.sub(r"(?<=\w)\(\)", "", text)  # stop() -> stop; a bare ")" reads as a sentence end
-        text = re.sub(r"~(?=\d)", "about ", text)
-        text = re.sub(r"(?<=\d)\s?[–—-]\s?(?=\d)", " to ", text)  # ranges: 9–12
-    text = re.sub(r"\b[A-Za-z0-9]+(?:_[A-Za-z0-9]+)+\b", speak_identifier, text)
-    text = VERSION.sub(speak_version, text)
-    if full:
-        text = re.sub(r"\b([A-Za-z])(\d+)\b", lambda m: f"{LETTERS[m[1].lower()]} {m[2]}", text)  # p99, x86
-    text = re.sub(r"(?<![\w.-])-(?=\d)", "minus ", text)
-    text = NUMBER.sub(speak_number, text)
-    lexicon = load_lexicon(LEXICON if full else {})
-    folded = {k: v for k, v in lexicon.items() if k == k.lower()}
-    for keys, flags, look in ((lexicon.keys() - folded.keys(), 0, lexicon), (folded.keys(), re.I, folded)):
-        if keys:
-            words = re.compile(r"(?<![\w-])(" + "|".join(map(re.escape, sorted(keys, key=len, reverse=True))) + r")(?![\w-])", flags)
-            text = words.sub(lambda m, look=look, flags=flags: look[m[1].lower() if flags else m[1]], text)
-    if full:
-        # Vowelless 2-5 letter words are abbreviations: db, cfg, RTX, HTML -> spelled out
-        text = re.sub(r"(?<![\w-])[b-df-hj-np-tv-xzB-DF-HJ-NP-TV-XZ]{2,5}(?![\w-])",
-                      lambda m: m[0] if m[0].lower() in SAY_AS_WORD else spell(m[0]), text)
-        text = re.sub(r"(?<![\w-])(?=[A-Z]*Y)[B-DF-HJ-NP-TV-Z]{2,5}(?![\w-])", lambda m: spell(m[0]), text)  # TTY, NYC
+    text = apply_replacements(text, cfg.get("replacements", DEFAULT_REPLACEMENTS))
+    if on("speak_hashes"):
+        text = UUID.sub(speak_hash, text)
+        text = HEX_HASH.sub(speak_hash, text)
+    if on("speak_paths"):
+        text = PATH.sub(lambda m: speak_path(m, on("speak_hashes")), text)
+    if on("speak_snake_case"):
+        text = re.sub(r"\b[A-Za-z0-9]+(?:_[A-Za-z0-9]+)+\b", speak_identifier, text)
+    if on("speak_versions"):
+        text = VERSION.sub(speak_version, text)
+    if on("spell_letter_digits"):
+        text = re.sub(r"\b([A-Za-z])(\d+)\b", lambda m: f"{LETTERS[m[1].lower()]} {m[2]}", text)
+    if on("speak_numbers"):
+        text = re.sub(r"(?<![\w.-])-(?=\d)", "minus ", text)
+        text = NUMBER.sub(speak_number, text)
+    if on("spell_abbreviations"):
+        # Vowelless 2-5 letter words, and all-caps ones whose only vowel is Y (TTY, NYC)
+        text = re.sub(r"(?<![\w-])[b-df-hj-np-tv-xzB-DF-HJ-NP-TV-XZ]{2,5}(?![\w-])", lambda m: spell(m[0]), text)
+        text = re.sub(r"(?<![\w-])(?=[A-Z]*Y)[B-DF-HJ-NP-TV-Z]{2,5}(?![\w-])", lambda m: spell(m[0]), text)
     text = re.sub(r"`([^`]*)`", r"\1", text)
     text = re.sub(r"^\s{0,3}#{1,6}\s*", "", text, flags=re.M)  # headings
     text = re.sub(r"^\s*([-*+]|\d+\.)\s+", "", text, flags=re.M)  # list markers
@@ -443,7 +423,7 @@ def speak(reply):
         start_new_session=True,
     )
     PID_FILE.write_text(str(proc.pid))
-    proc.stdin.write(truncate(to_speech(reply), max_chars()).encode("utf-8"))
+    proc.stdin.write(truncate(to_speech(reply, plugin_options()), max_chars()).encode("utf-8"))
     proc.stdin.close()  # don't wait; let speech run after the hook exits
 
 
