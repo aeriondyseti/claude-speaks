@@ -176,8 +176,9 @@ SCALES = [(10**12, "trillion"), (10**9, "billion"), (10**6, "million"), (1000, "
 UNITS = {"GB": "gigabytes", "GiB": "gigabytes", "MB": "megabytes", "MiB": "megabytes", "KB": "kilobytes",
          "TB": "terabytes", "ms": "milliseconds", "s": "seconds", "GHz": "gigahertz", "MHz": "megahertz",
          "Hz": "hertz", "kHz": "kilohertz", "dB": "decibels", "%": "percent"}
+# Spellings checked against Kokoro's phonemizer (/dev/phonemize): "ay" and "ey" both come out "eye".
 LETTERS = dict(zip("abcdefghijklmnopqrstuvwxyz", (
-    "ay bee see dee ee eff gee aitch eye jay kay el em en oh pee cue ar ess tee you vee "
+    "eigh bee see dee ee eff gee aitch eye jay kay el em en oh pee cue ar ess tee you vee "
     "double-you ex why zee").split()))
 # User-editable "find => replace" rules, applied first (once Markdown structure is gone). A plain word matches whole
 # words (any case when written in lowercase); /regex/ is a pattern. Every word-level fix lives here,
@@ -185,7 +186,7 @@ LETTERS = dict(zip("abcdefghijklmnopqrstuvwxyz", (
 DEFAULT_REPLACEMENTS = [
     "Ti => tee eye",
     # The letter a, not the article: alone in `code`, or beside a math operator (a >= b, x + a)
-    r"/(?<![\w'])(?:(?<=`)[aA](?=`)|[aA](?=\s?(?:[<>=+*%^]|!=))|(?:(?<=[<>=+*%^])|(?<=[<>=+*%^]\s))[aA])(?![\w'])/ => ey",
+    r"/(?<![\w'])(?:(?<=`)[aA](?=`)|[aA](?=\s?(?:[<>=+*%^]|!=))|(?:(?<=[<>=+*%^])|(?<=[<>=+*%^]\s))[aA])(?![\w'])/ => eigh",
     r"/(?<![\w/])(?:~|\$HOME)(?=/)/ => home",
     r"/\$HOME\b/ => home",
     r"/~(?=\d)/ => about",
@@ -250,7 +251,7 @@ def speak_version(m):
 
 
 # A clock time (other number:number pairs are ratios, a default replacement): 9:05, 14:00, 7:30 pm
-TIME = re.compile(r"(?<![\w:.])([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?(?:\s?([AaPp])\.?[Mm]\.?(?!\w))?(?![\w:])")
+TIME = re.compile(r"(?<![\w:.])([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?(?:\s?([AaPp])(?:\.[Mm]\.|[Mm])(?!\w))?(?![\w:])")
 
 
 def speak_time(m):
@@ -263,7 +264,7 @@ def speak_time(m):
     if second:
         words += f" and {int_words(int(second))} seconds"
     if half:
-        words += f" {half.lower()} m"
+        words += " " + spell(half + "m")  # "a m" would be read as the article
     return words
 
 

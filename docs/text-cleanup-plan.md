@@ -105,3 +105,8 @@ Done: tables are read row by row ("a, b."), with the `|---|` row and empty cells
 - **Paths as file name only** (CharlesAdewumi2004, opencode-voice): `~/.claude/hooks/speak-last-message.py` → "speak last message". A `speak_paths` value of `full` / `name` / `off` instead of a boolean.
 - **camelCase splitting** (opencode-voice): `parseConfig` → "parse config". A `split_camel_case` setting, off by default, since Kokoro often copes.
 - **Dropped:** a "🔊 Speaker:" summary line that Claude writes itself (antonyjaen); an "auto" mode that speaks only when the prompt looks dictated (CharlesAdewumi2004).
+
+## Follow-ups found after the sprint
+
+- **Two plugin versions fight over the daemon.** Each client replaces a daemon whose code fingerprint differs from its own (0.3.1). With two Claude Code sessions on different versions (one not yet reloaded), each reply shuts down the other's daemon, which cuts off speech mid-sentence. Seen 2026-10-13: a 0.5.0 session replaced a working-copy daemon one second into playback. Possible fix: only replace a daemon that is *older* (compare plugin versions, not just fingerprints), or let a running daemon finish its current reply before it exits.
+- **Check spellings with the phonemizer.** Kokoro-FastAPI's `/dev/phonemize` shows exactly how text will be read. A test could run every built-in spelling (the letter table, unit words, the default replacements' words) through it and flag any that come out wrong. It would be skipped when no server is running.

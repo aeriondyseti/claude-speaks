@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-10-13
+
+### Fixed
+
+- The letter A is spelled "eigh", which Kokoro says as the letter. "ey" and "ay" both came out as
+  "eye", in the letter rule and in spelled-out hashes and abbreviations. Spellings are checked
+  against Kokoro-FastAPI's `/dev/phonemize`. If you keep your own replacements, change `=> ey` to
+  `=> eigh`.
+- "am" in a time was read as the article; it's now spelled out like "pm".
+- "7:30 pm." no longer swallows the sentence's period.
+
 ## [0.5.1] - 2026-10-13
 
 ### Added
@@ -162,7 +173,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional OpenAI-compatible HTTP engine (raw PCM or vLLM-Omni SSE) with Pocket fallback,
   and a Voxtral 4B compose file for a GPU server.
 
-[Unreleased]: https://github.com/aeriondyseti/claude-speaks/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/aeriondyseti/claude-speaks/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/aeriondyseti/claude-speaks/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/aeriondyseti/claude-speaks/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/aeriondyseti/claude-speaks/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/aeriondyseti/claude-speaks/compare/v0.3.2...v0.4.0
