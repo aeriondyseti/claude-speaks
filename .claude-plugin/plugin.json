@@ -1,6 +1,6 @@
 {
   "name": "speaks",
-  "version": "0.1.5.2",
+  "version": "0.1.6.0",
   "description": "Reads Claude's replies aloud with Pocket TTS (local CPU), cleaning up paths, numbers and jargon for speech.",
   "author": {
     "name": "AerionDyseti"
@@ -109,7 +109,7 @@
     "speak_versions": {
       "type": "boolean",
       "title": "Read versions",
-      "description": "v0.3.2 -> \"vee zero point three point two\".",
+      "description": "v0.3.2 -> \"vee oh dot three dot two\". Only a decimal (3.14) says \"point\".",
       "default": true
     },
     "speak_numbers": {

@@ -16,10 +16,10 @@ def test_sample_default():
     assert to_speech(SAMPLE) == (
         "I read your rules in home slash dot claude slash settings dot json (Kokoro profile, with debug "
         "underscore log underscore text on). The daemon is up; stop gets called. Startup takes about three "
-        "point seven seconds, first audio in zero point three seconds. Files: home slash dev slash claude "
+        "point seven seconds, first audio in oh point three seconds. Files: home slash dev slash claude "
         "dash speaks slash daemon dot py, home slash dot config slash claude dash speaks slash config dot "
         "json, and home alone. Plugin at home slash dot claude slash plugins slash cache slash aeriondyseti "
-        "dash plugins slash speaks slash zero dot three dot two slash, so vee zero point three point two. "
+        "dash plugins slash speaks slash oh dot three dot two slash, so vee oh dot three dot two. "
         "Commit hash ending with two bee three see and 3cb8f78. The RTX fifty sixty tee eye has eight "
         "gigabytes of VRAM; nine to twelve sentences keep p99 under four hundred milliseconds at minus five "
         "decibels. Use x86 db cfg HTML TTY. See src slash components slash App dot tsx and README dot md, "
@@ -44,7 +44,7 @@ def test_sample_pocket_with_word_rules():
     ("See ~/dev/x/y.txt and $HOME alone.", "See home slash dev slash x slash y dot txt and home alone."),
     ("Commit 77522be1a2b3c landed.", "Commit hash ending with two bee three see landed."),
     ("Set debug_log_text and MAX_CHARS.", "Set debug underscore log underscore text and max underscore chars."),
-    ("Upgrade to v0.3.2 or 1.2.3.", "Upgrade to vee zero point three point two or one point two point three."),
+    ("Upgrade to v0.3.2 or 1.2.3.", "Upgrade to vee oh dot three dot two or one dot two dot three."),
     ("It takes ~3.7s and 9–12 runs.", "It takes about three point seven seconds and nine to twelve runs."),
     ("8 GB, 400 ms, -5 dB, 2x, 45%, 1,234,567.",
      "eight gigabytes, four hundred milliseconds, minus five decibels, two times, forty five percent, "
@@ -203,10 +203,10 @@ def test_long_first_sentence_without_clauses_stays_whole():
     ("See src/app.py:10:4 now.", "See src slash app dot py, line ten now."),
     ("Meet at 10:30 or 9:05 or 14:00.", "Meet at ten thirty or nine oh five or fourteen hundred."),
     ("At 7:00 pm, then 11:15am, or 10:00.", "At seven pee em, then eleven fifteen eigh em, or ten o'clock."),
-    ("A 3:1 ratio, 16:9 screens, 25:00 is no time.", "A three to one ratio, sixteen to nine screens, twenty five to zero is no time."),
+    ("A 3:1 ratio, 16:9 screens, 25:00 is no time.", "A three to one ratio, sixteen to nine screens, twenty five to oh is no time."),
     ("Run make.Then test.", "Run make. Then test."),
     ("Use Node.js and 3.14 and `java.lang.String`.", "Use Node dot js and three point one four and java dot lang dot String."),
-    ("id 123e4567-e89b-12d3-a456-426614174000 ok", "id hash ending with four zero zero zero ok."),
+    ("id 123e4567-e89b-12d3-a456-426614174000 ok", "id hash ending with four oh oh oh ok."),
     ("Costs $5 and $1,200.", "Costs five dollars and one thousand two hundred dollars."),
 ])
 def test_survey(md, spoken):
@@ -255,7 +255,7 @@ def test_letter_a(md, spoken):
 
 
 def test_hash_spells_a_as_eigh():
-    assert to_speech("Commit 1234567890aa landed.") == "Commit hash ending with nine zero eigh eigh landed."
+    assert to_speech("Commit 1234567890aa landed.") == "Commit hash ending with nine oh eigh eigh landed."
 
 
 @pytest.mark.parametrize("md,spoken", [
@@ -280,3 +280,13 @@ def test_daemon_speaker_keeps_its_methods():
     speaker = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Speaker")
     methods = {n.name for n in speaker.body if isinstance(n, ast.FunctionDef)}
     assert {"say", "_say", "stop", "say_http", "say_pocket", "stream_sentence"} <= methods
+
+
+@pytest.mark.parametrize("md,spoken", [
+    ("Pi is 3.14 and 2.0 and 1.05.", "Pi is three point one four and two point oh and one point oh five."),
+    ("It took 0.5s with 0 errors.", "It took oh point five seconds with oh errors."),
+    ("Released v2.0 as 0.1.5.2 and v1.10.0.", "Released vee two dot oh as oh dot one dot five dot two and vee one dot ten dot oh."),
+    ("Room 101 at 10:05.", "Room one hundred one at ten oh five."),
+])
+def test_oh_and_point_vs_dot(md, spoken):
+    assert to_speech(md) == spoken

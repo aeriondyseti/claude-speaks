@@ -185,7 +185,8 @@ def speak_path(m, hashes=True):
     return " " + re.sub(r"\s+", " ", out).strip() + " "
 
 
-ONES = "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen".split()
+# "oh", not "zero": v0.3 is "vee oh dot three", 0.5 seconds "oh point five". Only a decimal says "point".
+ONES = "oh one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen".split()
 TENS = "_ _ twenty thirty forty fifty sixty seventy eighty ninety".split()
 SCALES = [(10**12, "trillion"), (10**9, "billion"), (10**6, "million"), (1000, "thousand"), (100, "hundred")]
 UNITS = {"GB": "gigabytes", "GiB": "gigabytes", "MB": "megabytes", "MiB": "megabytes", "KB": "kilobytes",
@@ -228,7 +229,7 @@ TEXT_RULES = {
     "speak_hashes": True,         # 77522be1a2b3c, UUIDs -> "hash ending with two bee three see"
     "speak_paths": True,          # ~/dev/a.py -> "slash dev slash a dot py"
     "speak_snake_case": True,     # debug_log_text -> "debug underscore log underscore text"
-    "speak_versions": True,       # v0.3.2 -> "vee zero point three point two"
+    "speak_versions": True,       # v0.3.2 -> "vee oh dot three dot two"
     "speak_numbers": True,        # 1,234 / 8 GB / -5 dB / 2x -> words
     "spell_letter_digits": False, # p99, x86 -> "pee 99", "ex 86"
     "spell_abbreviations": False, # vowelless db, cfg, RTX, TTY -> "dee bee", ...
@@ -262,7 +263,7 @@ def say_whole(digits):
 
 
 def speak_version(m):
-    return ("vee " if m.group(1) else "") + " point ".join(int_words(int(p)) for p in m.group(2).split("."))
+    return ("vee " if m.group(1) else "") + " dot ".join(int_words(int(p)) for p in m.group(2).split("."))
 
 
 # A clock time (other number:number pairs are ratios, a default replacement): 9:05, 14:00, 7:30 pm

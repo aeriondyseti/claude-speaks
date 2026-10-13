@@ -6,13 +6,14 @@ Before speaking, it rewrites the reply so it sounds natural:
 
 | Written | Spoken |
 |---|---|
-| `~/.config/app/config.json` | home slash dot config slash app slash config dot jay sohn |
-| `b81be46c3777f8…cb970` | hash ending with bee nine seven zero |
-| `1.5×`, `0.12 s`, `~11.4 GB`, `9–12` | one point five times, zero point one two seconds, about eleven point four gigabytes, nine to twelve |
-| `RTX 5060 Ti`, `p99`, `v1.0`, `2.14.1` | ar tee ex fifty sixty tee eye, pee ninety nine, vee one point zero, two point fourteen point one |
-| `volume_db`, `db`, `TTY` | volume underscore dee bee, dee bee, tee tee why |
+| `~/.config/app/config.json` | home slash dot config slash app slash config dot json |
+| `b81be46c3777f8…cb970` | hash ending with bee nine seven oh |
+| `1.5×`, `0.12 s`, `~11.4 GB`, `9–12` | one point five times, oh point one two seconds, about eleven point four gigabytes, nine to twelve |
+| `RTX 5060 Ti`, `v1.0`, `2.14.1` | RTX fifty sixty tee eye, vee one dot oh, two dot fourteen dot one |
+| `volume_db`, `a >= b`, `x ** 2` | volume underscore dee bee, eigh greater than or equal to b, x to the power of two |
+| `helpers.ts:42`, `10:30`, `3:1`, `$5`, `#45` | helpers dot ts, line forty two, ten thirty, three to one, five dollars, number forty five |
 
-Code blocks and tables are skipped, links are read by their label, and long replies are cut off at about 600 characters.
+With the two spelling settings on (for Pocket TTS), `RTX`, `p99` and `TTY` become "ar tee ex", "pee ninety nine" and "tee tee why". Code blocks become "Code block omitted", tables are read row by row, links are read by their label, and long replies are cut off at about 600 characters.
 
 ## Install
 
@@ -46,7 +47,7 @@ As a plugin, everything is a plugin option, set when you install it or later in 
 | `speak_hashes` | on | Commit hashes and UUIDs read as "hash ending with" plus their last four characters |
 | `speak_paths` | on | Slashes, dots, dashes and underscores read inside paths and file names: `a/b.py` → "a slash b dot py" |
 | `speak_snake_case` | on | `debug_log_text` → "debug underscore log underscore text"; vowelless parts are spelled out |
-| `speak_versions` | on | `v0.3.2` → "vee zero point three point two" |
+| `speak_versions` | on | `v0.3.2` → "vee oh dot three dot two" |
 | `speak_numbers` | on | Numbers, units, multipliers and negatives as words: `8 GB`, `-5 dB`, `2x`, `1,234` |
 | `spell_letter_digits` | off | `p99`, `x86` → "pee 99", "ex 86" |
 | `spell_abbreviations` | off | Vowelless words (`db`, `cfg`, `RTX`) and all-caps ones like `TTY` spelled letter by letter. Add a replacement for any you want said as a word, e.g. `St => street`. |
