@@ -16,7 +16,7 @@ def test_sample_default():
     assert to_speech(SAMPLE) == (
         "I read your rules in home slash dot claude slash settings dot json (Kokoro profile, with debug "
         "underscore log underscore text on). The daemon is up; stop gets called. Startup takes about three "
-        "point seven seconds, first audio in oh point three seconds. Files: home slash dev slash claude "
+        "point seven seconds, first audio in zero point three seconds. Files: home slash dev slash claude "
         "dash speaks slash daemon dot py, home slash dot config slash claude dash speaks slash config dot "
         "json, and home alone. Plugin at home slash dot claude slash plugins slash cache slash aeriondyseti "
         "dash plugins slash speaks slash oh dot three dot two slash, so vee oh dot three dot two. "
@@ -283,10 +283,11 @@ def test_daemon_speaker_keeps_its_methods():
 
 
 @pytest.mark.parametrize("md,spoken", [
-    ("Pi is 3.14 and 2.0 and 1.05.", "Pi is three point one four and two point oh and one point oh five."),
-    ("It took 0.5s with 0 errors.", "It took oh point five seconds with oh errors."),
+    ("Pi is 3.14 and 2.0 and 1.05.", "Pi is three point one four and two point zero and one point zero five."),
+    ("It took 0.5s with 0 errors.", "It took zero point five seconds with oh errors."),
     ("Released v2.0 as 0.1.5.2 and v1.10.0.", "Released vee two dot oh as oh dot one dot five dot two and vee one dot ten dot oh."),
     ("Room 101 at 10:05.", "Room one hundred one at ten oh five."),
+    ("0.05 GB, 10.0x, -0.5 dB", "zero point zero five gigabytes, ten point zero times, minus zero point five decibels."),
 ])
 def test_oh_and_point_vs_dot(md, spoken):
     assert to_speech(md) == spoken

@@ -185,7 +185,8 @@ def speak_path(m, hashes=True):
     return " " + re.sub(r"\s+", " ", out).strip() + " "
 
 
-# "oh", not "zero": v0.3 is "vee oh dot three", 0.5 seconds "oh point five". Only a decimal says "point".
+# "oh", not "zero": v0.3 is "vee oh dot three". A decimal says "zero" and "point": 0.05 is
+# "zero point zero five". Versions say "dot".
 ONES = "oh one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen".split()
 TENS = "_ _ twenty thirty forty fifty sixty seventy eighty ninety".split()
 SCALES = [(10**12, "trillion"), (10**9, "billion"), (10**6, "million"), (1000, "thousand"), (100, "hundred")]
@@ -287,8 +288,9 @@ def speak_time(m):
 def speak_number(m):
     whole, frac, times, unit = m.groups()
     words = say_whole(whole)
-    if frac:
-        words += " point " + " ".join(ONES[int(d)] for d in frac)
+    if frac:  # a decimal says "zero" (0.5, 2.05); everything else says "oh"
+        digit = lambda d: "zero" if d == "0" else ONES[int(d)]  # noqa: E731
+        words = ("zero" if whole == "0" else words) + " point " + " ".join(digit(d) for d in frac)
     if times:
         words += " times"
     elif unit:

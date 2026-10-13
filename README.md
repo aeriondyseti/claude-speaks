@@ -8,7 +8,7 @@ Before speaking, it rewrites the reply so it sounds natural:
 |---|---|
 | `~/.config/app/config.json` | home slash dot config slash app slash config dot json |
 | `b81be46c3777f8…cb970` | hash ending with bee nine seven oh |
-| `1.5×`, `0.12 s`, `~11.4 GB`, `9–12` | one point five times, oh point one two seconds, about eleven point four gigabytes, nine to twelve |
+| `1.5×`, `0.12 s`, `~11.4 GB`, `9–12` | one point five times, zero point one two seconds, about eleven point four gigabytes, nine to twelve |
 | `RTX 5060 Ti`, `v1.0`, `2.14.1` | RTX fifty sixty tee eye, vee one dot oh, two dot fourteen dot one |
 | `volume_db`, `a >= b`, `x ** 2` | volume underscore dee bee, eigh greater than or equal to b, x to the power of two |
 | `helpers.ts:42`, `10:30`, `3:1`, `$5`, `#45` | helpers dot ts, line forty two, ten thirty, three to one, five dollars, number forty five |

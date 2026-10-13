@@ -10,6 +10,14 @@ corresponds to 0.1.5.1 in this scheme, and any four-part version is newer than a
 
 ## [Unreleased]
 
+## [0.1.6.1] - 2026-10-13
+
+### Changed
+
+- Decimal numbers say "zero" again: `0.5s` is "zero point five seconds", `2.05` "two point zero
+  five". Everything else keeps "oh": versions (`v0.3` "vee oh dot three"), hashes, path digits,
+  times and plain counts.
+
 ## [0.1.6.0] - 2026-10-13
 
 ### Changed
@@ -201,7 +209,8 @@ corresponds to 0.1.5.1 in this scheme, and any four-part version is newer than a
 - Optional OpenAI-compatible HTTP engine (raw PCM or vLLM-Omni SSE) with Pocket fallback,
   and a Voxtral 4B compose file for a GPU server.
 
-[Unreleased]: https://github.com/aeriondyseti/claude-speaks/compare/v0.1.6.0...HEAD
+[Unreleased]: https://github.com/aeriondyseti/claude-speaks/compare/v0.1.6.1...HEAD
+[0.1.6.1]: https://github.com/aeriondyseti/claude-speaks/compare/v0.1.6.0...v0.1.6.1
 [0.1.6.0]: https://github.com/aeriondyseti/claude-speaks/compare/v0.1.5.2...v0.1.6.0
 [0.1.5.2]: https://github.com/aeriondyseti/claude-speaks/compare/v0.5.2...v0.1.5.2
 [0.5.2]: https://github.com/aeriondyseti/claude-speaks/compare/v0.5.1...v0.5.2
