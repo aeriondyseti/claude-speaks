@@ -64,19 +64,55 @@ def _is_tool_result(entry):
     )
 
 
+HEX_HASH = re.compile(r"\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{12,}\b", re.I)
+UUID = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I)
+SEPARATORS = {"/": " slash ", ".": " dot ", "-": " dash ", "_": " underscore "}
+# Anchored paths (~/, $HOME/, /, ./, ../) or relative ones with 2+ slashes or a file extension.
+PATH = re.compile(
+    r"(?<![\w/])(?:(?:~|\$HOME|\.{1,2})?(?:/[\w.@+-]+)+/?"
+    r"|[\w@+-][\w.@+-]*(?:/[\w.@+-]+){2,}/?"
+    r"|[\w@+-][\w.@+-]*(?:/[\w.@+-]+)*/[\w@+-]+\.[A-Za-z]\w*"
+    r"|(?<!\w)[\w-]{2,}(?:\.[\w-]+)*\.[A-Za-z][A-Za-z0-9]+\b)"  # bare file.ext
+)
+
+
+def speak_hash(m):
+    return "hash ending with " + " ".join(m.group()[-4:])
+
+
+def speak_path(m):
+    path = m.group()
+    path = re.sub(r"^(~|\$HOME)(?=/|$)", "home", path)
+    path = UUID.sub(lambda h: f"\0{speak_hash(h)}\0", path)
+    path = HEX_HASH.sub(lambda h: f"\0{speak_hash(h)}\0", path)  # protect from separator words
+    parts = re.split(r"(\0[^\0]*\0)", path)
+    out = "".join(
+        part.strip("\0") if part.startswith("\0") else re.sub(r"[/._-]", lambda c: SEPARATORS[c.group()], part)
+        for part in parts
+    )
+    return " " + re.sub(r"\s+", " ", out).strip() + " "
+
+
 def to_speech(md):
     text = re.sub(r"```.*?(```|$)", "\nCode block omitted.\n", md, flags=re.S)
     text = "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("|"))  # tables
     text = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", text)  # links/images -> label
     text = re.sub(r"https?://\S+", "a link", text)
+    text = PATH.sub(speak_path, text)
+    text = UUID.sub(speak_hash, text)
+    text = HEX_HASH.sub(speak_hash, text)
+    text = re.sub(r"\$HOME\b", "home", text)
+    text = re.sub(r"~(?=\d)", "about ", text)
     text = re.sub(r"`([^`]*)`", r"\1", text)
     text = re.sub(r"^\s{0,3}#{1,6}\s*", "", text, flags=re.M)  # headings
     text = re.sub(r"^\s*([-*+]|\d+\.)\s+", "", text, flags=re.M)  # list markers
     text = re.sub(r"^\s*>\s?", "", text, flags=re.M)  # quotes
-    text = re.sub(r"(\*\*|__|\*|_|~~)(?=\S)(.+?)(?<=\S)\1", r"\2", text)  # emphasis
+    text = re.sub(r"(\*\*|\*|~~)(?=\S)(.+?)(?<=\S)\1", r"\2", text)  # emphasis
+    text = re.sub(r"(?<!\w)(__|_)(?=\S)(.+?)(?<=\S)\1(?!\w)", r"\2", text)  # not snake_case
     text = re.sub(r"[-*_]{3,}", " ", text)  # rules
     lines = [l.strip() for l in text.splitlines() if l.strip()]
     text = " ".join(l if l[-1] in ".!?:;," else l + "." for l in lines)  # pause between lines
+    text = re.sub(r"\s+([.,;:!?])", r"\1", text)  # padding left by speak_path
     return re.sub(r"\s+", " ", text).strip()
 
 
