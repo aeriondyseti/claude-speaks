@@ -1,6 +1,6 @@
 {
   "name": "speaks",
-  "version": "0.1.6.2",
+  "version": "0.1.7.0",
   "description": "Reads Claude's replies aloud with Pocket TTS (local CPU), cleaning up paths, numbers and jargon for speech.",
   "author": {
     "name": "AerionDyseti"
@@ -64,6 +64,14 @@
       "description": "Every word-level fix, applied first and the same for every engine; one 'find => replace' per entry. A plain word matches whole words (any case if written lowercase); /regex/ is a pattern. Pre-filled with light rules that suit Kokoro; add your own, e.g. 'kubectl => cube control' or 'py => pie'.",
       "default": [
         "Ti => tee eye",
+        "a-ha => aha",
+        "/(?<![\\w.])(\\d{0,3})[dD](\\d{1,3})kh(\\d{1,3})(?![\\w%]|\\.\\w)/ => \\1 dee \\2 keep highest \\3",
+        "/(?<![\\w.])(\\d{0,3})[dD](\\d{1,3})kl(\\d{1,3})(?![\\w%]|\\.\\w)/ => \\1 dee \\2 keep lowest \\3",
+        "/(?<![\\w.])(\\d{0,3})[dD](\\d{1,3}|%)\\s?-\\s?(?=\\d)/ => \\1 dee \\2 minus ",
+        "/(?<![\\w.])(\\d{0,3})[dD](\\d{1,3}|%)(?![\\w%]|\\.\\w)/ => \\1 dee \\2",
+        "/(?<![\\w'-])[aA][–-]([a-zA-Z])(?![\\w'-])/ => eigh to \\1",
+        "/(?<![\\w'-])([a-zA-Z])[–-][aA](?![\\w'-])/ => \\1 to eigh",
+        "/(?<![\\w'-])([a-zA-Z])[–-]([a-zA-Z])(?![\\w'-])/ => \\1 to \\2",
         "/(?<![\\w'])(?:(?<=`)[aA](?=`)|[aA](?=\\s?(?:[<>=+*%^]|!=))|(?:(?<=[<>=+*%^])|(?<=[<>=+*%^]\\s))[aA])(?![\\w'])/ => eigh",
         "/(?<![\\w/])(?:~|\\$HOME)(?=/)/ => home",
         "/\\$HOME\\b/ => home",

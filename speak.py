@@ -101,6 +101,8 @@ def _is_tool_result(entry):
 
 
 HEX_HASH = re.compile(r"\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{12,}\b", re.I)
+# A short hash (git's 7-character abbreviation): short enough to read out whole.
+SHORT_HASH = re.compile(r"\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,11}\b", re.I)
 UUID = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I)
 SEPARATORS = {"/": " slash ", ".": " dot ", "-": " dash ", "_": " underscore "}
 # Anchored paths (~/, $HOME/, /, ./, ../) or relative ones with 2+ slashes or a file extension.
@@ -210,6 +212,17 @@ LETTERS = dict(zip("abcdefghijklmnopqrstuvwxyz", (
 # never in code; these defaults are the light set that suits Kokoro.
 DEFAULT_REPLACEMENTS = [
     "Ti => tee eye",
+    "a-ha => aha",  # Kokoro says "eigh-ha" in some sentences; "aha" is stable
+    # Dice: 22d6, d20, 4d6kh3, 2d8-1 (a minus, not the 9–12 range rule below). At most three
+    # digits a side, so a short hash like 86441d4 isn't a roll.
+    r"/(?<![\w.])(\d{0,3})[dD](\d{1,3})kh(\d{1,3})(?![\w%]|\.\w)/ => \1 dee \2 keep highest \3",
+    r"/(?<![\w.])(\d{0,3})[dD](\d{1,3})kl(\d{1,3})(?![\w%]|\.\w)/ => \1 dee \2 keep lowest \3",
+    r"/(?<![\w.])(\d{0,3})[dD](\d{1,3}|%)\s?-\s?(?=\d)/ => \1 dee \2 minus ",
+    r"/(?<![\w.])(\d{0,3})[dD](\d{1,3}|%)(?![\w%]|\.\w)/ => \1 dee \2",
+    # Letter ranges (a–f, A-Z): single letters, no spaces, so x-ray and "works – a lot" are left alone
+    r"/(?<![\w'-])[aA][–-]([a-zA-Z])(?![\w'-])/ => eigh to \1",
+    r"/(?<![\w'-])([a-zA-Z])[–-][aA](?![\w'-])/ => \1 to eigh",
+    r"/(?<![\w'-])([a-zA-Z])[–-]([a-zA-Z])(?![\w'-])/ => \1 to \2",
     # The letter a, not the article: alone in `code`, or beside a math operator (a >= b, x + a)
     r"/(?<![\w'])(?:(?<=`)[aA](?=`)|[aA](?=\s?(?:[<>=+*%^]|!=))|(?:(?<=[<>=+*%^])|(?<=[<>=+*%^]\s))[aA])(?![\w'])/ => eigh",
     r"/(?<![\w/])(?:~|\$HOME)(?=/)/ => home",
@@ -235,7 +248,7 @@ DEFAULT_REPLACEMENTS = [
 ]
 # The rules that need code rather than a find-and-replace, each a setting of its own (default shown).
 TEXT_RULES = {
-    "speak_hashes": True,         # 77522be1a2b3c, UUIDs -> "hash ending with two bee three see"
+    "speak_hashes": True,         # 77522be1a2b3c, UUIDs -> "hash ending with two bee three see"; 86441d4 spelled out
     "speak_paths": True,          # ~/dev/a.py -> "slash dev slash a dot py"
     "speak_snake_case": True,     # debug_log_text -> "debug underscore log underscore text"
     "speak_versions": True,       # v0.3.2 -> "vee oh dot three dot two"
@@ -400,6 +413,7 @@ def to_speech(md, cfg=None):
     text = apply_replacements(text, cfg.get("replacements", DEFAULT_REPLACEMENTS))
     if on("speak_hashes"):
         text = HEX_HASH.sub(speak_hash, text)
+        text = SHORT_HASH.sub(lambda m: spell(m[0]), text)
     if on("speak_paths"):
         text = PATH.sub(lambda m: speak_path(m, on("speak_hashes")), text)
     if on("speak_snake_case"):

@@ -20,7 +20,7 @@ def test_sample_default():
         "dash speaks slash daemon dot py, home slash dot config slash claude dash speaks slash config dot "
         "json, and home alone. Plugin at home slash dot claude slash plugins slash cache slash aeriondyseti "
         "dash plugins slash speaks slash oh dot three dot two slash, so vee oh dot three dot two. "
-        "Commit hash ending with two bee three see and 3cb8f78. The RTX fifty sixty tee eye has eight "
+        "Commit hash ending with two bee three see and three see bee eight eff seven eight. The RTX fifty sixty tee eye has eight "
         "gigabytes of VRAM; nine to twelve sentences keep p99 under four hundred milliseconds at minus five "
         "decibels. Use x86 db cfg HTML TTY. See src slash components slash App dot tsx and README dot md, "
         "max underscore chars too. one million two hundred thirty four thousand five hundred sixty seven "
@@ -292,4 +292,34 @@ def test_daemon_speaker_keeps_its_methods():
     ("0.05 GB, 10.0x, -0.5 dB", "zero point zero five gigabytes, ten point zero times, minus zero point five decibels."),
 ])
 def test_oh_and_point_vs_dot(md, spoken):
+    assert to_speech(md) == spoken
+
+
+@pytest.mark.parametrize("md,spoken", [
+    ("Shipped as 86441d4 now.", "Shipped as eight six four four one dee four now."),
+    ("Commits a1b2c3d and 3cb8f78ab.", "Commits eigh one bee two see three dee and three see bee eight eff seven eight eigh bee."),
+    ("Not hashes: 1234567, deadbeef, cafe, 0x1f.", "Not hashes: one million two hundred thirty four thousand five hundred sixty seven, deadbeef, cafe, 0x1f."),
+])
+def test_short_hashes(md, spoken):
+    assert to_speech(md) == spoken
+
+
+@pytest.mark.parametrize("md,spoken", [
+    ("Hex is `0–9`/`a–f`, or a-f.", "Hex is zero to nine/eigh to f, or eigh to f."),
+    ("Sort A-Z, then z-a, or x–y.", "Sort eigh to Z, then z to eigh, or x to y."),
+    ("Leave x-ray, e-mail and T-shirt alone; A-ha!", "Leave x-ray, e-mail and T-shirt alone; aha!"),
+    ("It works – a lot.", "It works – a lot."),
+])
+def test_letter_ranges(md, spoken):
+    assert to_speech(md) == spoken
+
+
+@pytest.mark.parametrize("md,spoken", [
+    ("Roll 22d6, then d20.", "Roll twenty two dee six, then dee twenty."),
+    ("Deal 2d8+3 or 2d8 + 3, heal 1d4-1.", "Deal two dee eight+three or two dee eight + three, heal one dee four minus one."),
+    ("Stats: 4d6kh3, or 2d20kl1 at disadvantage.", "Stats: four dee six keep highest three, or two dee twenty keep lowest one at disadvantage."),
+    ("Roll `1d100` or d%.", "Roll one dee one hundred or dee %."),
+    ("Keep id1, 3D, d3.js, 2d and d6e5f7a.", "Keep id1, 3D, d3 dot js, 2d and dee six ee five eff seven eigh."),
+])
+def test_dice(md, spoken):
     assert to_speech(md) == spoken

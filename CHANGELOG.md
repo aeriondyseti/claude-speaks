@@ -10,6 +10,24 @@ corresponds to 0.1.5.1 in this scheme, and any four-part version is newer than a
 
 ## [Unreleased]
 
+## [0.1.7.0] - 2026-10-13
+
+### Added
+
+- Dice notation, as default replacements: `22d6` is "twenty two dee six", `d20` "dee twenty",
+  `2d8-1` "two dee eight minus one", `4d6kh3` / `2d20kl1` "keep highest three" / "keep lowest
+  one". Each side is at most three digits, so a short hash isn't taken for a roll.
+- Letter ranges, as default replacements: `a–f`, `A-Z` are "eigh to f", "eigh to Z". Single
+  letters only, so x-ray and e-mail are left alone.
+- `a-ha` is replaced with "aha": in some sentences Kokoro said "eigh-ha".
+
+### Fixed
+
+- Short hashes (7 to 11 hex characters, like git's `86441d4`) are spelled out instead of reaching
+  the voice raw, where Kokoro read them as one big number.
+
+If you keep your own `replacements` list, copy the new default rules into it.
+
 ## [0.1.6.2] - 2026-10-13
 
 ### Changed
@@ -217,7 +235,8 @@ corresponds to 0.1.5.1 in this scheme, and any four-part version is newer than a
 - Optional OpenAI-compatible HTTP engine (raw PCM or vLLM-Omni SSE) with Pocket fallback,
   and a Voxtral 4B compose file for a GPU server.
 
-[Unreleased]: https://github.com/aeriondyseti/claude-speaks/compare/v0.1.6.2...HEAD
+[Unreleased]: https://github.com/aeriondyseti/claude-speaks/compare/v0.1.7.0...HEAD
+[0.1.7.0]: https://github.com/aeriondyseti/claude-speaks/compare/v0.1.6.2...v0.1.7.0
 [0.1.6.2]: https://github.com/aeriondyseti/claude-speaks/compare/v0.1.6.1...v0.1.6.2
 [0.1.6.1]: https://github.com/aeriondyseti/claude-speaks/compare/v0.1.6.0...v0.1.6.1
 [0.1.6.0]: https://github.com/aeriondyseti/claude-speaks/compare/v0.1.5.2...v0.1.6.0
