@@ -16,6 +16,8 @@ Protocol: one JSON object per connection.
   {"cmd": "shutdown"}               exit
 """
 import argparse
+import queue
+import re
 import shutil
 import base64
 import json
@@ -70,6 +72,11 @@ def expand_env(value, env, key):
     if isinstance(value, dict):
         return {k: expand_env(v, env, key) for k, v in value.items()}
     return value
+
+
+def split_sentences(text):
+    parts = [p.strip() for p in re.split(r"(?<=[.!?])\s+", text) if p.strip()]
+    return parts or [text]
 
 
 def extra_body(cfg):
@@ -218,21 +225,33 @@ class Speaker:
             cfg = load_config(options)
             limit = int(cfg.get("max_chars", max_chars()))
             rules = cfg.get("replacements", DEFAULT_REPLACEMENTS)
+            debug = bool(cfg.get("debug_log_text"))
             try:
                 url_as_written = cfg.get("http_url")  # logged instead of the expansion, which may hold a key
                 if url_as_written:
                     cfg = {k: expand_env(v, env or {}, k) if k.startswith("http_") else v for k, v in cfg.items()}
+                pocket_text = None
                 if cfg.get("http_url"):
                     text = truncate(to_speech(reply, cfg.get("http_text_profile", "kokoro"), rules), limit)
-                    if not text or self.say_http(cfg, text, stop, report):
+                    if debug:
+                        log(f"text for {url_as_written}: {text}")
+                    spoke, rest = self.say_http(cfg, text, stop, report) if text else (True, "")
+                    if spoke and not rest:
                         log(f"spoke via {url_as_written}")
                         return
-                    log("http engine failed; falling back to Pocket")
-                text = truncate(to_speech(reply, "pocket", rules), limit)
-                if text:
+                    if spoke:  # a later sentence failed: Pocket says the rest
+                        log("http engine failed partway; Pocket speaks the rest")
+                        pocket_text = truncate(to_speech(rest, "pocket", rules), limit)
+                    else:
+                        log("http engine failed; falling back to Pocket")
+                if pocket_text is None:
+                    pocket_text = truncate(to_speech(reply, "pocket", rules), limit)
+                if pocket_text:
+                    if debug:
+                        log(f"text for Pocket: {pocket_text}")
                     self.ensure_pocket(report)
                     report.close()
-                    self.say_pocket(text, voice or cfg.get("pocket_voice") or DEFAULT_VOICE, stop,
+                    self.say_pocket(pocket_text, voice or cfg.get("pocket_voice") or DEFAULT_VOICE, stop,
                                     float(cfg.get("volume_db", 0)), cfg.get("audio_backend", "auto"))
             except BrokenPipeError:
                 pass  # playback was cut off by stop()
@@ -240,40 +259,73 @@ class Speaker:
                 log(f"playback failed: {e}")
 
     def say_http(self, cfg, text, stop, report):
-        """Stream PCM from the server. False (unreachable, an error, no audio) falls back to Pocket."""
+        """Speak through the server, one request per sentence (http_split_sentences, on by default) so
+        the first audio comes after one sentence's synthesis, not the whole reply's. A background
+        thread fetches ahead while playback runs. Returns (spoke anything, text left unspoken)."""
+        sentences = split_sentences(text) if cfg.get("http_split_sentences", True) else [text]
+        chunks = queue.Queue(maxsize=256)
+        progress = {"failed_at": None}
+        t0 = time.time()
+
+        def fetch():
+            for i, sentence in enumerate(sentences):
+                if stop.is_set():
+                    break
+                if not self.stream_sentence(cfg, sentence, stop, chunks):
+                    progress["failed_at"] = i
+                    break
+            chunks.put(None)
+
+        threading.Thread(target=fetch, daemon=True).start()
+        player = None
+        while (pcm := chunks.get()) is not None:
+            if stop.is_set():
+                continue  # drain until the fetcher notices
+            if player is None:
+                report.close()  # the server answered; nothing to report
+                log(f"first audio after {int((time.time() - t0) * 1000)} ms")
+                self.player = player = Player(int(cfg.get("http_sample_rate", 24000)), float(cfg.get("volume_db", 0)),
+                                              cfg.get("audio_backend", "auto"))
+            player.write_pcm(pcm)
+        if player:
+            player.close()
+        failed = progress["failed_at"]
+        if failed is None or stop.is_set():
+            return True, ""
+        return player is not None, " ".join(sentences[failed:])
+
+    def stream_sentence(self, cfg, text, stop, chunks):
+        """One request; queue its PCM. False when it failed before any audio (unreachable, an HTTP
+        error, nothing returned)."""
         body = {"input": text, "stream": True, "response_format": "pcm",
                 "model": cfg.get("http_model"), "voice": cfg.get("http_voice"), **extra_body(cfg)}
         req = urllib.request.Request(
             cfg["http_url"], data=json.dumps({k: v for k, v in body.items() if v}).encode(),
             headers=request_headers(cfg),
         )
+        got_audio = False
         try:
-            resp = urllib.request.urlopen(req, timeout=float(cfg.get("http_timeout", 10)))  # HTTPError is an OSError
+            with urllib.request.urlopen(req, timeout=float(cfg.get("http_timeout", 10))) as resp:  # HTTPError is an OSError
+                if resp.headers.get_content_type() == "text/event-stream":
+                    # vLLM-Omni: speech.audio.delta events with base64 PCM, then speech.audio.done
+                    # (the connection stays open for a while after done, so stop there).
+                    for line in resp:
+                        if stop.is_set():
+                            break
+                        if not line.startswith(b"data:"):
+                            continue
+                        event = json.loads(line[5:])
+                        if event.get("audio"):
+                            chunks.put(base64.b64decode(event["audio"]))
+                            got_audio = True
+                        if event.get("type", "").endswith(".done"):
+                            break
+                else:
+                    while not stop.is_set() and (data := resp.read1(8192)):
+                        chunks.put(data)
+                        got_audio = True
         except OSError as e:
             log(f"http request failed: {e}")
-            return False
-        got_audio = False
-        report.close()  # the server answered; nothing to report
-        with resp:
-            self.player = player = Player(int(cfg.get("http_sample_rate", 24000)), float(cfg.get("volume_db", 0)),
-                                          cfg.get("audio_backend", "auto"))
-            if resp.headers.get_content_type() == "text/event-stream":
-                # vLLM-Omni: speech.audio.delta events with base64 PCM, then speech.audio.done
-                # (the connection stays open for a while after done, so stop there).
-                for line in resp:
-                    if stop.is_set() or not line.startswith(b"data:"):
-                        continue
-                    event = json.loads(line[5:])
-                    if event.get("audio"):
-                        player.write_pcm(base64.b64decode(event["audio"]))
-                        got_audio = True
-                    if event.get("type", "").endswith(".done"):
-                        break
-            else:
-                while not stop.is_set() and (data := resp.read1(8192)):
-                    player.write_pcm(data)
-                    got_audio = True
-            player.close()
         return got_audio or stop.is_set()
 
     def say_pocket(self, text, voice, stop, volume_db, backend):

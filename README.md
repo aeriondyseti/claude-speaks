@@ -50,6 +50,8 @@ As a plugin, everything is a plugin option, set when you install it or later in 
 | `http_sample_rate`, `http_timeout` | `24000`, `10` | The PCM rate in Hz, and the seconds to wait before falling back |
 | `http_extra` | empty | JSON merged into the request body |
 | `http_text_profile` | `kokoro` | `kokoro` keeps only what Kokoro's pronunciation gets wrong; `pocket` spells everything out |
+| `http_split_sentences` | on | One request per sentence, fetched ahead of playback. The first audio comes after one sentence's synthesis (≈0.3 s with Kokoro-FastAPI on a GPU, against ≈3.7 s for a whole paragraph). If a later sentence fails, Pocket speaks the rest. |
+| `debug_log_text` | off | Logs the exact text each engine is given to `daemon.log`, for troubleshooting pronunciation. The log is readable only by you. |
 
 The rules that need code rather than a find-and-replace are built in: numbers, units and versions as words, hashes as "hash ending with …", and dots, dashes, slashes and underscores read inside paths and names. Under the `pocket` profile, `~/.config/claude-speaks/lexicon.json` (`{"word": "spoken"}`) still adds whole-word fixes.
 
@@ -57,7 +59,7 @@ The rules that need code rather than a find-and-replace are built in: numbers, u
 
 Any `http_*` setting can name environment variables as `${VAR}` or `${VAR:-default}`, as in Claude Code's `.mcp.json`, e.g. `http_api_key` = `${OPENAI_API_KEY}`. They're read from Claude Code's environment on each reply and expanded only when the request is built. Only the variables a setting names are passed along, and an unset one with no default expands to empty (`daemon.log` names it, never a value).
 
-With `http_url` set, speech goes to the server, which can return raw PCM or vLLM-Omni's SSE stream. A request that fails (unreachable, an HTTP error, or no audio) falls back to Pocket TTS for that reply. `~/.local/state/claude-speaks/daemon.log` records which engine spoke.
+With `http_url` set, speech goes to the server, which can return raw PCM or vLLM-Omni's SSE stream. A request that fails (unreachable, an HTTP error, or no audio) falls back to Pocket TTS for that reply. `~/.local/state/claude-speaks/daemon.log` records which engine spoke and how long the first audio took.
 
 [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI) works as-is:
 

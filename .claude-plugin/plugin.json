@@ -1,6 +1,6 @@
 {
   "name": "speaks",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Reads Claude's replies aloud with Pocket TTS (local CPU), cleaning up paths, numbers and jargon for speech.",
   "author": {
     "name": "AerionDyseti"
@@ -110,6 +110,18 @@
         "sounddevice"
       ],
       "default": "auto"
+    },
+    "http_split_sentences": {
+      "type": "boolean",
+      "title": "Send sentence by sentence",
+      "description": "One request per sentence, fetched ahead of playback: the first audio comes after one sentence, not the whole reply.",
+      "default": true
+    },
+    "debug_log_text": {
+      "type": "boolean",
+      "title": "Log spoken text",
+      "description": "Write the exact text each engine is given to ~/.local/state/claude-speaks/daemon.log (readable only by you), for troubleshooting pronunciation.",
+      "default": false
     }
   }
 }

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-13
+
+### Added
+
+- `http_split_sentences` (on by default): one request per sentence, fetched ahead of
+  playback. First audio from Kokoro-FastAPI dropped from ~3.7 s to ~0.3 s for a paragraph.
+  If a later sentence fails, Pocket speaks the rest.
+- `debug_log_text`: log the exact text each engine is given, for pronunciation troubleshooting.
+- `daemon.log` records time to first audio, and is created readable only by the user.
+
 ## [0.2.0] - 2026-10-13
 
 ### Added
@@ -56,6 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional OpenAI-compatible HTTP engine (raw PCM or vLLM-Omni SSE) with Pocket fallback,
   and a Voxtral 4B compose file for a GPU server.
 
-[Unreleased]: https://github.com/aeriondyseti/claude-speaks/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/aeriondyseti/claude-speaks/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/aeriondyseti/claude-speaks/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/aeriondyseti/claude-speaks/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/aeriondyseti/claude-speaks/releases/tag/v0.1.0

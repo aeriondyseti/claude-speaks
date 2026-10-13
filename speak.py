@@ -360,6 +360,14 @@ def speak_pocket(reply):
             return
 
 
+def open_private_log():
+    """daemon.log, readable only by the user: with debug_log_text on it holds reply text."""
+    path = STATE_DIR / "daemon.log"
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    os.chmod(path, 0o600)  # tighten a log created before this
+    return os.fdopen(fd, "ab")
+
+
 def start_daemon(text=None):
     """`uv run` installs the dependencies itself on first use (~1 GB), so that start can take minutes."""
     window = 60 if installed() else 900
@@ -370,7 +378,7 @@ def start_daemon(text=None):
         ["uv", "run", "--quiet", "--frozen", "--project", str(HERE), "python", str(HERE / "daemon.py")]
         + (["--say", text] if text else []),
         env=UV_ENV, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-        stderr=open(STATE_DIR / "daemon.log", "ab"), start_new_session=True,
+        stderr=open_private_log(), start_new_session=True,
     )
 
 
