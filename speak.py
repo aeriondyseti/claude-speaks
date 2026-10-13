@@ -40,8 +40,6 @@ UV_ENV = {**os.environ, "UV_PROJECT_ENVIRONMENT": str(VENV)}
 def installed():
     """True once uv has finished installing (it creates the venv folder before that)."""
     return any(VENV.glob("lib/python*/site-packages/pocket_tts"))
-# Kept outside the plugin folder so plugin updates don't throw away the ~1 GB install.
-VENV = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "claude-speaks/venv"
 
 
 def last_reply_from_transcript(path):
