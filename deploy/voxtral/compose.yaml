@@ -1,7 +1,7 @@
 # Manual trial: Voxtral 4B TTS on the 5060 Ti, OpenAI-style /v1/audio/speech on 127.0.0.1:18090.
 # Follows dyseti-quartermaster/deploy/first-batch conventions; not Quartermaster-managed yet
 # (needs its Docker lifecycle + GPU container mapping, Milestones 9.2/9.5).
-#   docker compose up -d && docker compose logs -f
+#   GPU_UUID=$(nvidia-smi --query-gpu=uuid --format=csv,noheader -i 0) docker compose up -d
 name: claude-speaks
 
 services:
@@ -20,7 +20,7 @@ services:
       HF_HUB_OFFLINE: "1"
       # On WSL every GPU is visible in the container regardless of device_ids; pin by UUID.
       CUDA_DEVICE_ORDER: PCI_BUS_ID
-      CUDA_VISIBLE_DEVICES: ${GPU_UUID:-GPU-00000000-0000-0000-0000-000000000000}
+      CUDA_VISIBLE_DEVICES: ${GPU_UUID:?Set GPU_UUID (nvidia-smi -L)}
     volumes:
       - type: bind
         source: ${HF_HUB:-${HOME}/.cache/huggingface/hub}
@@ -44,5 +44,5 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ["${GPU_UUID:-GPU-00000000-0000-0000-0000-000000000000}"]  # RTX 5060 Ti ("big")
+              device_ids: ["${GPU_UUID:?Set GPU_UUID (nvidia-smi -L)}"]
               capabilities: [gpu]

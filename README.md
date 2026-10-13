@@ -33,7 +33,7 @@ Config is re-read on every reply, so you can switch servers or voices without re
 `deploy/voxtral/compose.yaml` runs Mistral's Voxtral-4B-TTS in vLLM-Omni on the RTX 5060 Ti, at `127.0.0.1:18090`.
 
     hf download mistralai/Voxtral-4B-TTS-2603
-    docker compose -f deploy/voxtral/compose.yaml up -d    # ~4 min to load; the first request is slow while the GPU warms up
+    GPU_UUID=GPU-... docker compose -f deploy/voxtral/compose.yaml up -d    # see `nvidia-smi -L`; ~4 min to load; the first request is slow while the GPU warms up
 
 Measured on the 5060 Ti:
 - Uses ~11.4 GB of VRAM.
