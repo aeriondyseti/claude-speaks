@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-13
+
+### Added
+
+- Spoken forms as default replacements. Each is a rule in `replacements` that you can edit or remove:
+  - `x * y` and `x ** 2` become "x times y" and "x to the power of 2"
+  - `helpers.ts:42` becomes "helpers.ts, line 42"
+  - `3:1` becomes "3 to 1"
+  - `kevin@example.com` becomes "kevin at example.com"
+  - `#45` becomes "number 45"
+  - `$5` becomes "5 dollars"
+  - `>=`, `<=`, `!=` and `==` are said in words
+  - `__init__` becomes "dunder init"
+  - `*.py` becomes "star dot py"
+  - task boxes `[x]` and `[ ]` become "done" and "to do"
+- `/regex/` replacements can use `\1` backreferences.
+- Clock times are read as times: `9:05` is "nine oh five", `14:00` is "fourteen hundred", `7:30 pm`
+  is "seven thirty p m".
+- Tables are read aloud, one row per sentence with a pause between cells, instead of being skipped.
+- A test suite for the text cleanup: `uv run --no-project --with pytest pytest`.
+
+### Changed
+
+- Regex replacements only add a space where the replacement would otherwise run into the next
+  character. Before, they always added one on both sides.
+- Markdown structure is removed before any rule runs.
+- A long first sentence is sent to the TTS server in clauses. In one test, Kokoro's first audio
+  came after 1.07 s instead of 2.7 s.
+- Your own `replacements` list replaces the defaults, so copy the new rules into it if you keep one.
+
+### Fixed
+
+- Numbered lists are no longer read as numbers: "1. first" was spoken "one. first".
+- No stray asterisk is spoken: `***bold***`, bold across a line break, spaced rules (`* * *`)
+  and `*.py` globs are all handled.
+- A sentence-ending period after a path is no longer read as "dot".
+- URLs no longer swallow the punctuation after them.
+- Dotfiles such as `.env` are read as paths, and the space before them is kept.
+- `#1` at the start of a line is no longer taken for a heading.
+- Setext underlines, closing hashes and a leading `>=` are no longer spoken.
+- UUIDs are no longer split by the `9–12` range rule.
+- `now.Right` is read as two sentences.
+- "Mr. Smith" and "e.g. this" are no longer sent as two requests.
+- HTML tags, entities, terminal colour codes, emoji, autolinks and footnote markers are no longer
+  spoken. Tags are only removed when they are certainly HTML, so `<path>` and `Vec<String>` stay.
+
 ## [0.4.0] - 2026-10-13
 
 ### Changed
@@ -103,7 +149,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional OpenAI-compatible HTTP engine (raw PCM or vLLM-Omni SSE) with Pocket fallback,
   and a Voxtral 4B compose file for a GPU server.
 
-[Unreleased]: https://github.com/aeriondyseti/claude-speaks/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/aeriondyseti/claude-speaks/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/aeriondyseti/claude-speaks/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/aeriondyseti/claude-speaks/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/aeriondyseti/claude-speaks/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/aeriondyseti/claude-speaks/compare/v0.3.0...v0.3.1
